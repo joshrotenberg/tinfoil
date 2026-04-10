@@ -29,9 +29,11 @@ defmodule Tinfoil.MixProject do
   defp deps do
     [
       {:jason, "~> 1.4"},
+      {:req, "~> 0.5"},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev], runtime: false}
+      {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
+      {:plug, "~> 1.0", only: :test}
     ]
   end
 

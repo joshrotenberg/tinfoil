@@ -122,19 +122,31 @@ defmodule Tinfoil.GeneratorTest do
       assert yaml =~ "TAP_REPO: owner/homebrew-tap"
     end
 
-    test "workflow interpolates the archive template" do
-      yaml =
-        build_config(archive_name: "{app}_v{version}_{target}")
-        |> Generator.render_workflow()
-
-      assert yaml =~ ~s(BASENAME="{app}_v{version}_{target}")
-    end
-
-    test "workflow uses matrix.burrito_name for BURRITO_TARGET and the binary path" do
+    test "workflow delegates build to mix tinfoil.build" do
       yaml = build_config() |> Generator.render_workflow()
 
-      assert yaml =~ "BURRITO_TARGET: ${{ matrix.burrito_name }}"
-      assert yaml =~ ~s(BIN="burrito_out/${APP_NAME}_${BURRITO_NAME}")
+      assert yaml =~ "mix tinfoil.build --target ${{ matrix.target }}"
+      refute yaml =~ "BURRITO_TARGET"
+      refute yaml =~ "burrito_out/"
+    end
+
+    test "workflow delegates publish to mix tinfoil.publish with GITHUB_TOKEN" do
+      yaml = build_config() |> Generator.render_workflow()
+
+      assert yaml =~ "mix tinfoil.publish --input-dir artifacts"
+      assert yaml =~ "GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}"
+      refute yaml =~ "softprops/action-gh-release"
+    end
+
+    test "workflow adds --draft when github.draft is true" do
+      yaml =
+        build_config(
+          targets: [:darwin_arm64],
+          github: [draft: true]
+        )
+        |> Generator.render_workflow()
+
+      assert yaml =~ "mix tinfoil.publish --input-dir artifacts --draft"
     end
 
     test "workflow matrix entries include burrito_name mapped from the user's release config" do

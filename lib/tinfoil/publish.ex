@@ -1,0 +1,219 @@
+defmodule Tinfoil.Publish do
+  @moduledoc """
+  Create a GitHub Release and upload archive assets to it.
+
+  This module is the v0.2 replacement for `softprops/action-gh-release`
+  in the generated workflow. It uses `Req` to talk to GitHub's REST API
+  directly, so the release lifecycle (create → upload assets) happens
+  inside the tool rather than inside CI-specific third-party actions.
+
+  Homebrew formula publishing is intentionally out of scope here — the
+  existing `scripts/update-homebrew.sh` still handles that path.
+  """
+
+  alias Tinfoil.{Archive, Config}
+
+  @github_api "https://api.github.com"
+
+  @type opts :: [
+          input_dir: Path.t(),
+          tag: String.t() | nil,
+          draft: boolean() | nil,
+          req: Req.Request.t() | nil
+        ]
+
+  @type result :: %{
+          release_id: integer(),
+          html_url: String.t(),
+          uploaded: [String.t()]
+        }
+
+  @doc """
+  Publish release archives from `input_dir` (default `"artifacts"`) to
+  a new GitHub Release on the repo configured in the tinfoil config.
+
+  The set of assets uploaded is every `*.tar.gz` or `*.zip` in
+  `input_dir`, plus the combined `checksums-sha256.txt` produced from
+  their `.sha256` sidecars.
+
+  ## Authentication
+
+  Requires a `GITHUB_TOKEN` environment variable (or a `GH_TOKEN`
+  fallback) with `contents: write` permission on the target repo.
+
+  ## Tag
+
+  The tag to release against is taken from `opts[:tag]` if given,
+  otherwise from the `GITHUB_REF_NAME` environment variable (which
+  CI sets automatically on tag pushes). Versions matching `-rc`,
+  `-beta`, or `-alpha` are auto-marked as prerelease.
+  """
+  @spec publish(Config.t(), opts()) :: {:ok, result()} | {:error, term()}
+  def publish(%Config{} = config, opts \\ []) do
+    input_dir = Keyword.get(opts, :input_dir, "artifacts")
+
+    with {:ok, repo} <- fetch_repo(config),
+         {:ok, tag} <- fetch_tag(opts),
+         :ok <- ensure_input_dir(input_dir),
+         {:ok, req} <- build_req(opts) do
+      _combined = Archive.combined_checksums(input_dir)
+      assets = list_assets(input_dir)
+
+      with {:ok, release} <- create_release(req, repo, tag, config, opts),
+           {:ok, uploaded} <- upload_assets(req, release, assets) do
+        {:ok,
+         %{
+           release_id: release["id"],
+           html_url: release["html_url"],
+           uploaded: uploaded
+         }}
+      end
+    end
+  end
+
+  ## ───────────────────── internals ─────────────────────
+
+  defp fetch_repo(%Config{github: %{repo: nil}}),
+    do: {:error, ":github :repo is unresolved — set it in :tinfoil config or push a git remote"}
+
+  defp fetch_repo(%Config{github: %{repo: repo}}), do: {:ok, repo}
+
+  defp fetch_token do
+    case System.get_env("GITHUB_TOKEN") || System.get_env("GH_TOKEN") do
+      nil -> {:error, :missing_github_token}
+      "" -> {:error, :missing_github_token}
+      token -> {:ok, token}
+    end
+  end
+
+  defp fetch_tag(opts) do
+    tag = Keyword.get(opts, :tag) || System.get_env("GITHUB_REF_NAME")
+
+    case tag do
+      nil -> {:error, :missing_tag}
+      "" -> {:error, :missing_tag}
+      tag -> {:ok, tag}
+    end
+  end
+
+  defp ensure_input_dir(dir) do
+    if File.dir?(dir) do
+      :ok
+    else
+      {:error, {:missing_input_dir, dir}}
+    end
+  end
+
+  defp list_assets(input_dir) do
+    archives =
+      [Path.join(input_dir, "*.tar.gz"), Path.join(input_dir, "*.zip")]
+      |> Enum.flat_map(&Path.wildcard/1)
+
+    checksums = Path.join(input_dir, "checksums-sha256.txt")
+
+    (archives ++ [checksums])
+    |> Enum.filter(&File.regular?/1)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  defp build_req(opts) do
+    case Keyword.get(opts, :req) do
+      %Req.Request{} = req ->
+        {:ok, req}
+
+      nil ->
+        with {:ok, token} <- fetch_token() do
+          {:ok,
+           Req.new(
+             base_url: @github_api,
+             headers: [
+               {"accept", "application/vnd.github+json"},
+               {"x-github-api-version", "2022-11-28"},
+               {"authorization", "Bearer #{token}"},
+               {"user-agent", "tinfoil/#{tinfoil_version()}"}
+             ]
+           )}
+        end
+    end
+  end
+
+  defp create_release(req, repo, tag, config, opts) do
+    body = %{
+      tag_name: tag,
+      name: tag,
+      draft: Keyword.get(opts, :draft, config.github[:draft] || false),
+      prerelease: prerelease?(tag),
+      generate_release_notes: true
+    }
+
+    case Req.post(req, url: "/repos/#{repo}/releases", json: body) do
+      {:ok, %Req.Response{status: 201, body: release}} ->
+        {:ok, release}
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        {:error, {:create_release_failed, status, body}}
+
+      {:error, reason} ->
+        {:error, {:create_release_error, reason}}
+    end
+  end
+
+  defp upload_assets(req, release, assets) do
+    upload_template = release["upload_url"]
+
+    Enum.reduce_while(assets, {:ok, []}, fn path, {:ok, acc} ->
+      case upload_one(req, upload_template, path) do
+        {:ok, name} -> {:cont, {:ok, [name | acc]}}
+        {:error, _} = err -> {:halt, err}
+      end
+    end)
+    |> case do
+      {:ok, names} -> {:ok, Enum.reverse(names)}
+      other -> other
+    end
+  end
+
+  defp upload_one(req, upload_template, path) do
+    name = Path.basename(path)
+    upload_url = String.replace(upload_template, ~r/\{\?.*\}/, "")
+    body = File.read!(path)
+
+    case Req.post(req,
+           url: upload_url,
+           params: [name: name],
+           headers: [{"content-type", content_type(path)}],
+           body: body
+         ) do
+      {:ok, %Req.Response{status: status}} when status in 200..299 ->
+        {:ok, name}
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        {:error, {:upload_failed, name, status, body}}
+
+      {:error, reason} ->
+        {:error, {:upload_error, name, reason}}
+    end
+  end
+
+  defp content_type(path) do
+    cond do
+      String.ends_with?(path, ".tar.gz") -> "application/gzip"
+      String.ends_with?(path, ".zip") -> "application/zip"
+      String.ends_with?(path, ".txt") -> "text/plain"
+      true -> "application/octet-stream"
+    end
+  end
+
+  @doc false
+  def prerelease?(tag) do
+    tag =~ ~r/-(rc|beta|alpha)(\.|$)/
+  end
+
+  defp tinfoil_version do
+    case Application.spec(:tinfoil, :vsn) do
+      nil -> "dev"
+      vsn -> to_string(vsn)
+    end
+  end
+end

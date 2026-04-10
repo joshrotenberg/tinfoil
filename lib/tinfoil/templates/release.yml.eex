@@ -43,57 +43,11 @@ jobs:
         with:
           version: "<%= @ci.zig_version %>"
 
-      - name: Derive version from tag
-        id: version
-        shell: bash
-        run: |
-          TAG="${GITHUB_REF_NAME}"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
-
       - name: Install dependencies
         run: mix deps.get
 
-      - name: Build Burrito release
-        env:
-          BURRITO_TARGET: ${{ matrix.burrito_name }}
-        run: mix release
-
-      - name: Package archive
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p _tinfoil
-          VERSION="${{ steps.version.outputs.version }}"
-          TRIPLE="${{ matrix.triple }}"
-          BURRITO_NAME="${{ matrix.burrito_name }}"
-          BASENAME="<%= @archive_basename_template %>"
-          BASENAME="${BASENAME//\{app\}/$APP_NAME}"
-          BASENAME="${BASENAME//\{version\}/$VERSION}"
-          BASENAME="${BASENAME//\{target\}/$TRIPLE}"
-          ARCHIVE="${BASENAME}<%= @archive_ext %>"
-
-          # Burrito writes binaries to burrito_out/<app>_<burrito_target_name>.
-          BIN="burrito_out/${APP_NAME}_${BURRITO_NAME}"
-          if [ ! -f "$BIN" ]; then
-            echo "::error::No Burrito output at ${BIN}"
-            ls -la burrito_out/ || true
-            exit 1
-          fi
-
-          # Normalize the binary name in the archive to the app name.
-          cp "$BIN" "_tinfoil/${APP_NAME}"
-          tar -C _tinfoil -czf "_tinfoil/${ARCHIVE}" "${APP_NAME}"
-          rm "_tinfoil/${APP_NAME}"
-
-          # Checksum
-          if command -v shasum >/dev/null 2>&1; then
-            (cd _tinfoil && shasum -a 256 "${ARCHIVE}" > "${ARCHIVE}.sha256")
-          else
-            (cd _tinfoil && sha256sum "${ARCHIVE}" > "${ARCHIVE}.sha256")
-          fi
-
-          ls -la _tinfoil/
+      - name: Build and package release
+        run: mix tinfoil.build --target ${{ matrix.target }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -105,11 +59,16 @@ jobs:
   release:
     name: Release
     needs: build
-    runs-on: ubuntu-latest<%= if @github.draft do %>
-    # draft release configured in tinfoil config<% end %>
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up Elixir/OTP
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "<%= @ci.elixir_version %>"
+          otp-version: "<%= @ci.otp_version %>"
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -117,24 +76,13 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: Generate combined checksum file
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd artifacts
-          cat *.sha256 > checksums-sha256.txt
-          echo "── checksums-sha256.txt ──"
-          cat checksums-sha256.txt
+      - name: Install dependencies
+        run: mix deps.get
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            artifacts/*<%= @archive_ext %>
-            artifacts/checksums-sha256.txt
-          generate_release_notes: true
-          draft: <%= @github.draft %>
-          fail_on_unmatched_files: true
+      - name: Publish GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: mix tinfoil.publish --input-dir artifacts<%= if @github.draft do %> --draft<% end %>
 <%= if @homebrew.enabled do %>
   homebrew:
     name: Update Homebrew tap

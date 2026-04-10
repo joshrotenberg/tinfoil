@@ -1,0 +1,75 @@
+defmodule Tinfoil.Archive do
+  @moduledoc """
+  Create release archives from built binaries.
+
+  Archive creation is bytes-in, bytes-out: given a binary path and an
+  archive basename, produce a gzipped tarball (containing the binary
+  renamed to its canonical app name) plus a `.sha256` sidecar file in
+  `shasum -a 256` format.
+
+  Uses Erlang's built-in `:erl_tar` and `:crypto` — no shelling out,
+  no extra dependencies.
+  """
+
+  @doc """
+  Create `<output_dir>/<archive_basename>.tar.gz` containing the file
+  at `binary_path`, renamed to `to_string(app)` inside the archive.
+
+  Returns the path to the written archive.
+  """
+  @spec tar_gz(Path.t(), atom(), String.t(), Path.t()) :: Path.t()
+  def tar_gz(binary_path, app, archive_basename, output_dir) do
+    File.mkdir_p!(output_dir)
+    archive_path = Path.join(output_dir, archive_basename <> ".tar.gz")
+
+    name_in_archive = to_charlist(to_string(app))
+    binary = File.read!(binary_path)
+
+    :ok =
+      :erl_tar.create(
+        String.to_charlist(archive_path),
+        [{name_in_archive, binary}],
+        [:compressed]
+      )
+
+    archive_path
+  end
+
+  @doc """
+  Compute the SHA256 of the file at `path`, write a `<path>.sha256`
+  sidecar in `shasum -a 256` format (`<hex>  <filename>\\n`), and
+  return `{hex_digest, sidecar_path}`.
+  """
+  @spec sha256(Path.t()) :: {String.t(), Path.t()}
+  def sha256(path) do
+    digest =
+      :sha256
+      |> :crypto.hash(File.read!(path))
+      |> Base.encode16(case: :lower)
+
+    sidecar = path <> ".sha256"
+    File.write!(sidecar, "#{digest}  #{Path.basename(path)}\n")
+    {digest, sidecar}
+  end
+
+  @doc """
+  Combine per-archive `.sha256` sidecars under `input_dir` into a
+  single `checksums-sha256.txt` file at `Path.join(input_dir, name)`.
+
+  Returns the path to the combined file.
+  """
+  @spec combined_checksums(Path.t(), String.t()) :: Path.t()
+  def combined_checksums(input_dir, name \\ "checksums-sha256.txt") do
+    combined_path = Path.join(input_dir, name)
+
+    contents =
+      input_dir
+      |> Path.join("*.sha256")
+      |> Path.wildcard()
+      |> Enum.sort()
+      |> Enum.map_join(&File.read!/1)
+
+    File.write!(combined_path, contents)
+    combined_path
+  end
+end
