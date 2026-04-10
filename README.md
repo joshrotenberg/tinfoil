@@ -5,25 +5,29 @@
 [![HexDocs](https://img.shields.io/badge/hex-docs-blue.svg)](https://hexdocs.pm/tinfoil)
 [![License](https://img.shields.io/hexpm/l/tinfoil.svg)](https://github.com/joshrotenberg/tinfoil/blob/main/LICENSE)
 
-Distribution automation for [Burrito](https://github.com/burrito-elixir/burrito)-based Elixir CLIs.
+Release automation for [Burrito](https://github.com/burrito-elixir/burrito)-based Elixir CLIs.
 
-Be to Burrito what [cargo-dist](https://opensource.axo.dev/cargo-dist/) is to Cargo: a
-single tool that takes your `mix release` output to platform binaries in a GitHub
-Release, with Homebrew and installer support, in under 30 minutes of setup.
+Tinfoil reads a `:tinfoil` keyword in your `mix.exs`, generates a
+GitHub Actions workflow, and provides `mix` tasks that workflow calls
+at CI time to build each target, package the binary as a tar.gz with a
+sha256 sidecar, create a GitHub Release, and upload the assets.
 
-> **Status:** pre-1.0, actively developed. The v0.2 line ships the full
-> tool-in-the-loop lifecycle (`mix tinfoil.build` and `mix tinfoil.publish`),
-> so the generated CI workflow is a thin shell that calls tinfoil tasks and
-> upgrading tinfoil upgrades the pipeline. Expect minor breakage as defaults
-> get tightened and target strategies evolve — pin to an exact minor version
-> if you need stability.
+> **Status:** pre-1.0. The mix tasks, workflow template, and Hex publish
+> loop are all in place and dogfooded against a real Burrito project.
+> Defaults and target strategies are still evolving — pin to an exact
+> minor version if you need stability.
 
-## The problem
+## Scope
 
-Burrito solves binary packaging. Nobody has solved what comes after:
-CI matrix builds, GitHub Releases, checksums, Homebrew formulas, installer
-scripts. Every team shipping a Burrito-based CLI (Next LS, lazyasdf, etc.)
-hand-rolls the same pipeline. tinfoil is that pipeline, as a Hex package.
+Burrito packages an Elixir application into a single binary. Tinfoil
+handles the steps around that: the CI matrix that runs the builds, the
+archive + checksum packaging, the GitHub Release creation, and
+(optionally) an installer script and a Homebrew formula template.
+
+It does not replace Burrito, and it does not try to handle everything
+a release pipeline might ever want — anything beyond creating a
+GitHub Release and publishing archives (signing, notarization, custom
+distribution channels, etc.) is out of scope.
 
 ## Installation
 
@@ -72,12 +76,12 @@ mix deps.get
 mix tinfoil.init
 ```
 
-That generates `.github/workflows/release.yml` and any enabled extras
-(installer, Homebrew formula template, tap update script). Commit the
-generated files, push a tag like `v0.1.0`, and watch the workflow build
-and publish platform binaries to a GitHub Release.
+That generates `.github/workflows/release.yml` and, if enabled, an
+installer script, a Homebrew formula template, and a tap update
+script. Commit the generated files and push a tag like `v0.1.0` to
+trigger the workflow.
 
-## What you get
+## Generated files
 
 ```
 your-project/
@@ -89,28 +93,35 @@ your-project/
 └── mix.exs
 ```
 
-The workflow builds for every configured target in parallel, packages
-each binary into a `.tar.gz` with a SHA256 sidecar, creates a GitHub
-Release, and (optionally) pushes an updated Homebrew formula to your tap.
+The workflow runs a build job per configured target in parallel. Each
+job calls `mix tinfoil.build`, which produces one `.tar.gz` with a
+sha256 sidecar. A release job then collects the artifacts, calls
+`mix tinfoil.publish` to create the GitHub Release, and (if homebrew
+is enabled) runs the tap update script.
 
 ## Tasks
 
 | Task                     | Description |
 | ------------------------ | ----------- |
-| `mix tinfoil.init`       | Interactive scaffold — writes config guidance and generates the workflow. |
+| `mix tinfoil.init`       | Print a suggested `:tinfoil` config snippet and, if one already exists, generate the workflow and supporting files. |
 | `mix tinfoil.generate`   | Regenerate the workflow and scripts from the current config. Run after editing `:tinfoil` in mix.exs or upgrading tinfoil. |
-| `mix tinfoil.plan`       | Show what would be built and released. Supports `--format human` (default), `--format json`, and `--format matrix` for GitHub Actions consumption. |
-| `mix tinfoil.build`      | Build a single target end-to-end: runs `mix release` with the right `BURRITO_TARGET`, packages the binary into a tar.gz, and writes a sha256 sidecar. Called by the generated CI workflow once per matrix entry. |
-| `mix tinfoil.publish`    | Create a GitHub Release from artifacts in `artifacts/` and upload every archive plus a combined `checksums-sha256.txt`. Auto-detects `-rc`/`-beta`/`-alpha` tags as prereleases. Pass `--replace` to delete and recreate if a release for the tag already exists. |
+| `mix tinfoil.plan`       | Print what would be built and released. Supports `--format human` (default), `--format json`, and `--format matrix` for GitHub Actions consumption. |
+| `mix tinfoil.build`      | Build a single target: run `mix release` with the right `BURRITO_TARGET`, package the binary into a tar.gz, and write a sha256 sidecar. Called by the generated workflow once per matrix entry. |
+| `mix tinfoil.publish`    | Create a GitHub Release from artifacts in `artifacts/` and upload every archive plus a combined `checksums-sha256.txt`. Tags containing `-rc`, `-beta`, or `-alpha` are marked as prereleases. Pass `--replace` to delete and recreate if a release for the tag already exists. |
 
-The generated CI workflow is a thin shell that calls `mix tinfoil.build`
-and `mix tinfoil.publish`, so upgrading tinfoil automatically upgrades
-the pipeline — no need to regenerate on most version bumps.
+The generated workflow invokes `mix tinfoil.build` and
+`mix tinfoil.publish` directly, so tinfoil version bumps usually take
+effect the next time the workflow runs without needing to regenerate
+the YAML.
 
-## How tinfoil talks to your Burrito config
+## Burrito target resolution
 
-tinfoil has its own abstract target atoms (`:darwin_arm64`, `:linux_x86_64`, …)
-but Burrito uses whatever names the user chose in their `releases/0` block.
+Tinfoil uses its own abstract target atoms (`:darwin_arm64`,
+`:linux_x86_64`, …) independent of the names you choose in your
+Burrito config. At load time, tinfoil reads your `releases/0` block
+and matches each tinfoil target to a Burrito target by `[os:, cpu:]`
+pair.
+
 For example, [woof](https://github.com/joshrotenberg/woof) declares:
 
 ```elixir
@@ -128,14 +139,13 @@ releases: [
 ]
 ```
 
-When you ask tinfoil to build `:darwin_arm64`, it reads that block,
-matches the `[os:, cpu:]` pair, and drives Burrito with
-`BURRITO_TARGET=macos_m1`. Then it looks for the output at
-`burrito_out/woof_macos_m1` and packages it as
-`woof-0.1.0-aarch64-apple-darwin.tar.gz`. You don't have to mirror
-tinfoil's target names in your Burrito config — tinfoil resolves them
-at `mix tinfoil.plan` time and errors clearly if a tinfoil target has
-no matching Burrito target.
+When tinfoil builds `:darwin_arm64`, it finds the matching Burrito
+target (`macos_m1`), runs `mix release` with
+`BURRITO_TARGET=macos_m1`, reads the output at
+`burrito_out/woof_macos_m1`, and packages it as
+`woof-0.1.0-aarch64-apple-darwin.tar.gz`. If a tinfoil target has no
+matching Burrito target, `Tinfoil.Config.load/1` returns an error at
+plan time naming the expected `[os:, cpu:]` pair.
 
 ### `mix tinfoil.plan`
 
@@ -238,16 +248,17 @@ tinfoil: [
 
 The only required key is `:targets`. Everything else has a sensible default.
 
-## How it compares
+## Related projects
 
-- **Burrito** builds self-contained binaries. tinfoil orchestrates everything
-  that happens *around* that build. They're peers, not rivals.
-- **cargo-dist** is the architectural inspiration. tinfoil borrows the
-  "generate-and-delegate" model and the idea that the intelligence should
-  live in the tool, not in hand-rolled YAML.
-- **Next LS's release pipeline** is the state of the art for Burrito today —
-  bespoke, sophisticated, and impossible to reuse. tinfoil is what "the
-  reusable version of that" would look like.
+- [**Burrito**](https://github.com/burrito-elixir/burrito) — builds
+  self-contained Elixir binaries. Required peer dependency. Tinfoil
+  reads your Burrito target config and drives `mix release` via the
+  normal Burrito flow.
+- [**cargo-dist**](https://opensource.axo.dev/cargo-dist/) — the
+  equivalent tool in the Rust/Cargo ecosystem. Tinfoil borrows the
+  architectural pattern of a generated CI workflow that calls back
+  into the tool via mix tasks, so upgrading the tool upgrades the
+  pipeline.
 
 ## License
 
