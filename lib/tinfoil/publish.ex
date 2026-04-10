@@ -50,6 +50,12 @@ defmodule Tinfoil.Publish do
   """
   @spec publish(Config.t(), opts()) :: {:ok, result()} | {:error, term()}
   def publish(%Config{} = config, opts \\ []) do
+    # Mix tasks don't auto-start their dep apps' supervision trees. Req
+    # owns a built-in Finch pool named Req.Finch that must be running
+    # before any request; without this call we crash with
+    # `ArgumentError: unknown registry: Req.Finch`.
+    {:ok, _} = Application.ensure_all_started(:req)
+
     input_dir = Keyword.get(opts, :input_dir, "artifacts")
 
     with {:ok, repo} <- fetch_repo(config),
