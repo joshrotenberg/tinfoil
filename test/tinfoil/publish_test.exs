@@ -70,6 +70,73 @@ defmodule Tinfoil.PublishTest do
     )
   end
 
+  # Plug that emulates GitHub's "release already exists" state. The first
+  # POST to /releases returns 422 with the real error shape; a GET by tag
+  # returns the existing release; a DELETE on the existing release is a
+  # no-op; a second POST after delete returns 201 (handled via the
+  # :release_deleted process dict flag — Req's plug option runs in-process,
+  # so self() / Process.put stay inside the test).
+  defp conflicting_stub(test_pid) do
+    fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+
+      send(
+        test_pid,
+        {:request, conn.method, conn.request_path, conn.query_string, body}
+      )
+
+      dispatch_conflicting(conn.method, conn.request_path, conn)
+    end
+  end
+
+  defp dispatch_conflicting("POST", "/repos/owner/my_cli/releases", conn) do
+    if Process.get(:release_deleted, false) do
+      respond_json(conn, 201, %{
+        "id" => 99,
+        "html_url" => "https://github.com/owner/my_cli/releases/tag/v1.2.3",
+        "upload_url" => "https://test.invalid/repos/owner/my_cli/releases/99/assets{?name,label}"
+      })
+    else
+      respond_json(conn, 422, %{
+        "message" => "Validation Failed",
+        "errors" => [
+          %{"resource" => "Release", "code" => "already_exists", "field" => "tag_name"}
+        ]
+      })
+    end
+  end
+
+  defp dispatch_conflicting("GET", "/repos/owner/my_cli/releases/tags/v1.2.3", conn) do
+    respond_json(conn, 200, %{"id" => 7, "tag_name" => "v1.2.3"})
+  end
+
+  defp dispatch_conflicting("DELETE", "/repos/owner/my_cli/releases/7", conn) do
+    Process.put(:release_deleted, true)
+    Plug.Conn.resp(conn, 204, "")
+  end
+
+  defp dispatch_conflicting("POST", "/repos/owner/my_cli/releases/99/assets", conn) do
+    respond_json(conn, 201, %{"id" => 1, "name" => "ok"})
+  end
+
+  defp dispatch_conflicting(_method, _path, conn) do
+    Plug.Conn.resp(conn, 404, "not found")
+  end
+
+  defp respond_json(conn, status, body) do
+    conn
+    |> Plug.Conn.put_resp_header("content-type", "application/json")
+    |> Plug.Conn.resp(status, Jason.encode!(body))
+  end
+
+  defp conflicting_req(test_pid) do
+    Req.new(
+      base_url: "https://test.invalid",
+      plug: conflicting_stub(test_pid),
+      headers: [{"authorization", "Bearer fake-token"}]
+    )
+  end
+
   describe "publish/2 happy path" do
     @tag :tmp_dir
     test "creates a release and uploads every archive + checksum", %{tmp_dir: tmp} do
@@ -171,6 +238,90 @@ defmodule Tinfoil.PublishTest do
 
       assert {:error, :missing_tag} =
                Publish.publish(build_config(), req: stub_req(self()))
+    end
+  end
+
+  describe "publish/2 existing release handling" do
+    setup do
+      Process.delete(:release_deleted)
+      :ok
+    end
+
+    @tag :tmp_dir
+    test "returns :release_already_exists_no_replace when a release exists and replace is false",
+         %{tmp_dir: tmp} do
+      input = Path.join(tmp, "artifacts")
+      File.mkdir_p!(input)
+      File.write!(Path.join(input, "x.tar.gz"), "x")
+      File.write!(Path.join(input, "x.tar.gz.sha256"), "xxx  x.tar.gz\n")
+
+      assert {:error, :release_already_exists_no_replace} =
+               Publish.publish(build_config(),
+                 input_dir: input,
+                 tag: "v1.2.3",
+                 req: conflicting_req(self())
+               )
+
+      # Verify we did attempt the POST but never the GET/DELETE
+      assert_receive {:request, "POST", "/repos/owner/my_cli/releases", _, _}
+      refute_receive {:request, "GET", _, _, _}, 100
+      refute_receive {:request, "DELETE", _, _, _}, 100
+    end
+
+    @tag :tmp_dir
+    test "with replace: true finds, deletes, and recreates the release", %{tmp_dir: tmp} do
+      input = Path.join(tmp, "artifacts")
+      File.mkdir_p!(input)
+      File.write!(Path.join(input, "y.tar.gz"), "y")
+      File.write!(Path.join(input, "y.tar.gz.sha256"), "yyy  y.tar.gz\n")
+
+      assert {:ok, result} =
+               Publish.publish(build_config(),
+                 input_dir: input,
+                 tag: "v1.2.3",
+                 replace: true,
+                 req: conflicting_req(self())
+               )
+
+      # Second POST succeeded and we got the post-delete release id back
+      assert result.release_id == 99
+
+      # Verify the full GET → DELETE → POST sequence happened
+      assert_receive {:request, "POST", "/repos/owner/my_cli/releases", _, _}
+      assert_receive {:request, "GET", "/repos/owner/my_cli/releases/tags/v1.2.3", _, _}
+      assert_receive {:request, "DELETE", "/repos/owner/my_cli/releases/7", _, _}
+      assert_receive {:request, "POST", "/repos/owner/my_cli/releases", _, _}
+    end
+
+    @tag :tmp_dir
+    test "non-422 create errors are propagated regardless of replace flag", %{tmp_dir: tmp} do
+      input = Path.join(tmp, "artifacts")
+      File.mkdir_p!(input)
+      File.write!(Path.join(input, "z.tar.gz"), "z")
+      File.write!(Path.join(input, "z.tar.gz.sha256"), "zzz  z.tar.gz\n")
+
+      # This stub returns 500 for every POST to /releases — replace should
+      # not kick in because the error isn't "already_exists"
+      internal_error_req =
+        Req.new(
+          base_url: "https://test.invalid",
+          plug: fn conn ->
+            if conn.method == "POST" and conn.request_path == "/repos/owner/my_cli/releases" do
+              Plug.Conn.resp(conn, 500, "boom")
+            else
+              Plug.Conn.resp(conn, 404, "not found")
+            end
+          end,
+          headers: [{"authorization", "Bearer fake-token"}]
+        )
+
+      assert {:error, {:create_release_failed, 500, _}} =
+               Publish.publish(build_config(),
+                 input_dir: input,
+                 tag: "v1.2.3",
+                 replace: true,
+                 req: internal_error_req
+               )
     end
   end
 
