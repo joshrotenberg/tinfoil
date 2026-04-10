@@ -117,9 +117,7 @@ defmodule Tinfoil.Generator do
       burrito_names: config.burrito_names,
       ci: config.ci,
       github: config.github,
-      homebrew: config.homebrew,
-      archive_basename_template: config.archive_name,
-      archive_ext: Config.archive_extension(config)
+      homebrew: config.homebrew
     ]
 
     eval("release.yml.eex", assigns)

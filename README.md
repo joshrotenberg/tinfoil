@@ -87,29 +87,61 @@ Release, and (optionally) pushes an updated Homebrew formula to your tap.
 | `mix tinfoil.init`       | Interactive scaffold — writes config guidance and generates the workflow. |
 | `mix tinfoil.generate`   | Regenerate the workflow and scripts from the current config. Run after editing `:tinfoil` in mix.exs or upgrading tinfoil. |
 | `mix tinfoil.plan`       | Show what would be built and released. Supports `--format human` (default), `--format json`, and `--format matrix` for GitHub Actions consumption. |
+| `mix tinfoil.build`      | Build a single target end-to-end: runs `mix release` with the right `BURRITO_TARGET`, packages the binary into a tar.gz, and writes a sha256 sidecar. Called by the generated CI workflow once per matrix entry. |
+| `mix tinfoil.publish`    | Create a GitHub Release from artifacts in `artifacts/` and upload every archive plus a combined `checksums-sha256.txt`. Auto-detects `-rc`/`-beta`/`-alpha` tags as prereleases. Pass `--replace` to delete and recreate if a release for the tag already exists. |
 
-v0.2+ will add `mix tinfoil.build` and `mix tinfoil.publish`, and evolve the
-generated workflow to call these tasks directly.
+The generated CI workflow is a thin shell that calls `mix tinfoil.build`
+and `mix tinfoil.publish`, so upgrading tinfoil automatically upgrades
+the pipeline — no need to regenerate on most version bumps.
+
+## How tinfoil talks to your Burrito config
+
+tinfoil has its own abstract target atoms (`:darwin_arm64`, `:linux_x86_64`, …)
+but Burrito uses whatever names the user chose in their `releases/0` block.
+For example, [woof](https://github.com/joshrotenberg/woof) declares:
+
+```elixir
+releases: [
+  woof: [
+    steps: [:assemble, &Burrito.wrap/1],
+    burrito: [
+      targets: [
+        macos:    [os: :darwin, cpu: :x86_64],
+        macos_m1: [os: :darwin, cpu: :aarch64],
+        linux:    [os: :linux,  cpu: :x86_64]
+      ]
+    ]
+  ]
+]
+```
+
+When you ask tinfoil to build `:darwin_arm64`, it reads that block,
+matches the `[os:, cpu:]` pair, and drives Burrito with
+`BURRITO_TARGET=macos_m1`. Then it looks for the output at
+`burrito_out/woof_macos_m1` and packages it as
+`woof-0.1.0-aarch64-apple-darwin.tar.gz`. You don't have to mirror
+tinfoil's target names in your Burrito config — tinfoil resolves them
+at `mix tinfoil.plan` time and errors clearly if a tinfoil target has
+no matching Burrito target.
 
 ### `mix tinfoil.plan`
 
-Read-only preview of the release plan:
+Read-only preview of the release plan, including the resolved Burrito
+target names:
 
 ```sh
 $ mix tinfoil.plan
-tinfoil plan for my_cli 1.2.3
+tinfoil plan for woof 0.1.0
 
-  target         runner            archive
-  ─────────────  ────────────────  ──────────────────────────────────────────────
-  darwin_arm64   macos-latest      my_cli-1.2.3-aarch64-apple-darwin.tar.gz
-  darwin_x86_64  macos-13          my_cli-1.2.3-x86_64-apple-darwin.tar.gz
-  linux_x86_64   ubuntu-latest     my_cli-1.2.3-x86_64-unknown-linux-musl.tar.gz
-  linux_arm64    ubuntu-24.04-arm  my_cli-1.2.3-aarch64-unknown-linux-musl.tar.gz
+  target         burrito   runner         archive
+  ─────────────  ────────  ─────────────  ───────────────────────────────────────────
+  darwin_arm64   macos_m1  macos-latest   woof-0.1.0-aarch64-apple-darwin.tar.gz
+  linux_x86_64   linux     ubuntu-latest  woof-0.1.0-x86_64-unknown-linux-musl.tar.gz
 
   format:    tar_gz (sha256)
-  github:    owner/my_cli (draft: false)
+  github:    joshrotenberg/woof (draft: false)
   homebrew:  disabled
-  installer: disabled
+  installer: ~/.local/bin
 ```
 
 For CI consumption, `--format matrix` emits a compact GitHub Actions
