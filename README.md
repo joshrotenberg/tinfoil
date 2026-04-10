@@ -86,8 +86,44 @@ Release, and (optionally) pushes an updated Homebrew formula to your tap.
 | ------------------------ | ----------- |
 | `mix tinfoil.init`       | Interactive scaffold — writes config guidance and generates the workflow. |
 | `mix tinfoil.generate`   | Regenerate the workflow and scripts from the current config. Run after editing `:tinfoil` in mix.exs or upgrading tinfoil. |
+| `mix tinfoil.plan`       | Show what would be built and released. Supports `--format human` (default), `--format json`, and `--format matrix` for GitHub Actions consumption. |
 
-v0.2+ will add `mix tinfoil.plan`, `mix tinfoil.build`, and `mix tinfoil.publish`.
+v0.2+ will add `mix tinfoil.build` and `mix tinfoil.publish`, and evolve the
+generated workflow to call these tasks directly.
+
+### `mix tinfoil.plan`
+
+Read-only preview of the release plan:
+
+```sh
+$ mix tinfoil.plan
+tinfoil plan for my_cli 1.2.3
+
+  target         runner            archive
+  ─────────────  ────────────────  ──────────────────────────────────────────────
+  darwin_arm64   macos-latest      my_cli-1.2.3-aarch64-apple-darwin.tar.gz
+  darwin_x86_64  macos-13          my_cli-1.2.3-x86_64-apple-darwin.tar.gz
+  linux_x86_64   ubuntu-latest     my_cli-1.2.3-x86_64-unknown-linux-musl.tar.gz
+  linux_arm64    ubuntu-24.04-arm  my_cli-1.2.3-aarch64-unknown-linux-musl.tar.gz
+
+  format:    tar_gz (sha256)
+  github:    owner/my_cli (draft: false)
+  homebrew:  disabled
+  installer: disabled
+```
+
+For CI consumption, `--format matrix` emits a compact GitHub Actions
+matrix fragment:
+
+```yaml
+- id: plan
+  run: echo "matrix=$(mix tinfoil.plan --format matrix)" >> "$GITHUB_OUTPUT"
+
+build:
+  needs: plan
+  strategy:
+    matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+```
 
 ## Supported targets
 
