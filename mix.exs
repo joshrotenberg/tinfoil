@@ -53,8 +53,12 @@ defmodule Tinfoil.MixProject do
   defp package do
     [
       licenses: ["MIT"],
-      links: %{"GitHub" => @source_url},
-      files: ~w(lib mix.exs README.md LICENSE)
+      links: %{
+        "GitHub" => @source_url,
+        "Changelog" => "#{@source_url}/blob/main/CHANGELOG.md",
+        "Hex" => "https://hex.pm/packages/tinfoil"
+      },
+      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md)
     ]
   end
 
@@ -62,7 +66,35 @@ defmodule Tinfoil.MixProject do
     [
       main: "readme",
       source_ref: "v#{@version}",
-      extras: ["README.md"]
+      source_url: @source_url,
+      extras: [
+        "README.md",
+        "CHANGELOG.md": [title: "Changelog"]
+      ],
+      groups_for_modules: [
+        "Public API": [
+          Tinfoil,
+          Tinfoil.Config,
+          Tinfoil.Target,
+          Tinfoil.Plan
+        ],
+        "Build lifecycle": [
+          Tinfoil.Build,
+          Tinfoil.Archive,
+          Tinfoil.Publish
+        ],
+        Integration: [
+          Tinfoil.Burrito,
+          Tinfoil.Generator
+        ],
+        "Mix tasks": [
+          Mix.Tasks.Tinfoil.Init,
+          Mix.Tasks.Tinfoil.Generate,
+          Mix.Tasks.Tinfoil.Plan,
+          Mix.Tasks.Tinfoil.Build,
+          Mix.Tasks.Tinfoil.Publish
+        ]
+      ]
     ]
   end
 end

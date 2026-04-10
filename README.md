@@ -1,14 +1,22 @@
 # tinfoil
 
+[![CI](https://github.com/joshrotenberg/tinfoil/actions/workflows/ci.yml/badge.svg)](https://github.com/joshrotenberg/tinfoil/actions/workflows/ci.yml)
+[![Hex.pm](https://img.shields.io/hexpm/v/tinfoil.svg)](https://hex.pm/packages/tinfoil)
+[![HexDocs](https://img.shields.io/badge/hex-docs-blue.svg)](https://hexdocs.pm/tinfoil)
+[![License](https://img.shields.io/hexpm/l/tinfoil.svg)](https://github.com/joshrotenberg/tinfoil/blob/main/LICENSE)
+
 Distribution automation for [Burrito](https://github.com/burrito-elixir/burrito)-based Elixir CLIs.
 
 Be to Burrito what [cargo-dist](https://opensource.axo.dev/cargo-dist/) is to Cargo: a
 single tool that takes your `mix release` output to platform binaries in a GitHub
 Release, with Homebrew and installer support, in under 30 minutes of setup.
 
-> **Status:** v0.1 — generate-and-forget. `mix tinfoil.init` scaffolds a
-> self-contained GitHub Actions workflow. Later versions will evolve the workflow
-> to call `mix tinfoil.*` tasks directly, the way cargo-dist does.
+> **Status:** pre-1.0, actively developed. The v0.2 line ships the full
+> tool-in-the-loop lifecycle (`mix tinfoil.build` and `mix tinfoil.publish`),
+> so the generated CI workflow is a thin shell that calls tinfoil tasks and
+> upgrading tinfoil upgrades the pipeline. Expect minor breakage as defaults
+> get tightened and target strategies evolve — pin to an exact minor version
+> if you need stability.
 
 ## The problem
 
@@ -19,16 +27,21 @@ hand-rolls the same pipeline. tinfoil is that pipeline, as a Hex package.
 
 ## Installation
 
-Add tinfoil to your dev dependencies alongside Burrito:
+Add tinfoil to your dependencies alongside Burrito:
 
 ```elixir
 def deps do
   [
     {:burrito, "~> 1.0"},
-    {:tinfoil, "~> 0.1", only: :dev, runtime: false}
+    {:tinfoil, "~> 0.2", runtime: false}
   ]
 end
 ```
+
+> **Don't set `only: :dev`.** The generated CI workflow runs
+> `MIX_ENV=prod mix tinfoil.build`, so tinfoil must be compiled in the prod
+> environment too. `runtime: false` keeps it out of the started applications
+> at runtime while still making the mix tasks available during builds.
 
 Then add a `:tinfoil` key to `project/0` in `mix.exs`:
 
@@ -162,12 +175,19 @@ build:
 | Target          | Triple                          | GitHub runner       |
 | --------------- | ------------------------------- | ------------------- |
 | `:darwin_arm64` | `aarch64-apple-darwin`          | `macos-latest`      |
-| `:darwin_x86_64`| `x86_64-apple-darwin`           | `macos-13`          |
+| `:darwin_x86_64`| `x86_64-apple-darwin`           | `macos-13` ⚠        |
 | `:linux_x86_64` | `x86_64-unknown-linux-musl`     | `ubuntu-latest`     |
 | `:linux_arm64`  | `aarch64-unknown-linux-musl`    | `ubuntu-24.04-arm`  |
 
 Triples follow the standard Rust-style convention since that is what
 users expect to see in release asset names.
+
+> ⚠ **`:darwin_x86_64` availability is unreliable.** GitHub has been
+> retiring the `macos-13` Intel runner label. On many accounts the
+> job gets queued and then cancelled with no steps executed. The
+> current recommendation is to omit `:darwin_x86_64` from your
+> `:targets` list until tinfoil lands a cross-compile-from-ARM
+> strategy. Tracking this in the roadmap as a priority item.
 
 Windows support is deferred until Burrito's Windows story stabilizes.
 

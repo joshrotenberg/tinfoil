@@ -7,9 +7,10 @@ defmodule Tinfoil.Build do
   `BURRITO_TARGET` set, then locate the binary, tar.gz it, and write
   a sha256 sidecar.
 
-  This module is the heart of the v0.2 "tool-in-the-loop" story: the
+  This module is the heart of tinfoil's tool-in-the-loop story: the
   generated workflow calls `mix tinfoil.build --target <atom>` once
-  per matrix entry instead of embedding the packaging logic in bash.
+  per matrix entry instead of embedding the packaging logic in bash,
+  so upgrading tinfoil upgrades the pipeline.
   """
 
   alias Tinfoil.{Archive, Config, Target}

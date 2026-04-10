@@ -2,10 +2,15 @@ defmodule Tinfoil.Publish do
   @moduledoc """
   Create a GitHub Release and upload archive assets to it.
 
-  This module is the v0.2 replacement for `softprops/action-gh-release`
-  in the generated workflow. It uses `Req` to talk to GitHub's REST API
-  directly, so the release lifecycle (create → upload assets) happens
-  inside the tool rather than inside CI-specific third-party actions.
+  Tinfoil's own replacement for `softprops/action-gh-release` in the
+  generated workflow. It uses [`Req`](https://hex.pm/packages/req) to
+  talk to GitHub's REST API directly, so the release lifecycle
+  (create → upload assets → handle existing releases) happens inside
+  the tool rather than inside CI-specific third-party actions.
+
+  The generated workflow calls this module via `mix tinfoil.publish`
+  once, after the build matrix finishes, on a single `ubuntu-latest`
+  runner.
 
   Homebrew formula publishing is intentionally out of scope here — the
   existing `scripts/update-homebrew.sh` still handles that path.

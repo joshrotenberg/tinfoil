@@ -6,8 +6,8 @@ defmodule Mix.Tasks.Tinfoil.Build do
 
   Runs `mix release` with the appropriate `BURRITO_TARGET` for the
   requested target, then tars and checksums the output. Designed to
-  be called once per CI matrix entry — the generated workflow uses
-  it that way in v0.2.
+  be called once per CI matrix entry — the generated workflow invokes
+  it that way.
 
   ## Examples
 
