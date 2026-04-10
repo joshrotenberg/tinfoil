@@ -175,9 +175,11 @@ tinfoil: [
 
   ci: [
     provider: :github_actions,
-    elixir_version: "1.18",
+    # elixir_version is auto-detected from the project's :elixir
+    # requirement if not explicitly set; these are the current fallbacks.
+    elixir_version: "1.19",
     otp_version: "28",
-    zig_version: "0.13.0"
+    zig_version: "0.15.2"
   ]
 ]
 ```

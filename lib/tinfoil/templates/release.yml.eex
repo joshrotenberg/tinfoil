@@ -43,6 +43,16 @@ jobs:
         with:
           version: "<%= @ci.zig_version %>"
 
+      - name: Cache mix deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-${{ matrix.target }}-mix-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-mix-
+
       - name: Install dependencies
         run: mix deps.get
 
@@ -75,6 +85,16 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+
+      - name: Cache mix deps and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-release-mix-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-release-mix-
 
       - name: Install dependencies
         run: mix deps.get
