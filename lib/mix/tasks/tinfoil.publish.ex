@@ -7,7 +7,7 @@ defmodule Mix.Tasks.Tinfoil.Publish do
 
   Designed to run on a single CI runner after all matrix builds
   finish and archives are downloaded into one place. The generated
-  workflow in v0.2 calls it this way:
+  workflow calls it this way:
 
       - name: Publish
         env:
