@@ -325,6 +325,71 @@ defmodule Tinfoil.PublishTest do
     end
   end
 
+  describe "publish/2 retry behavior" do
+    @tag :tmp_dir
+    test "retries a transient 5xx on create release and succeeds on the next attempt",
+         %{tmp_dir: tmp} do
+      input = Path.join(tmp, "artifacts")
+      File.mkdir_p!(input)
+      File.write!(Path.join(input, "r.tar.gz"), "r")
+      File.write!(Path.join(input, "r.tar.gz.sha256"), "rrr  r.tar.gz\n")
+
+      Process.put(:create_count, 0)
+
+      req = retrying_req(self())
+
+      assert {:ok, result} =
+               Publish.publish(build_config(),
+                 input_dir: input,
+                 tag: "v1.2.3",
+                 req: req
+               )
+
+      assert result.release_id == 123
+
+      # Two or more calls to POST /releases means the retry ran. (A single
+      # call would mean no retry, which would fail the publish on the 500.)
+      assert Process.get(:create_count) >= 2
+    end
+  end
+
+  defp retrying_req(test_pid) do
+    Req.new(
+      base_url: "https://test.invalid",
+      plug: fn conn ->
+        send(test_pid, {:request, conn.method, conn.request_path})
+        dispatch_retrying(conn.method, conn.request_path, conn)
+      end,
+      headers: [{"authorization", "Bearer fake-token"}],
+      retry: :transient,
+      max_retries: 3,
+      retry_delay: fn _ -> 0 end
+    )
+  end
+
+  defp dispatch_retrying("POST", "/repos/owner/my_cli/releases", conn) do
+    n = Process.get(:create_count, 0)
+    Process.put(:create_count, n + 1)
+
+    if n == 0 do
+      Plug.Conn.resp(conn, 500, "transient boom")
+    else
+      respond_json(conn, 201, %{
+        "id" => 123,
+        "html_url" => "https://github.com/owner/my_cli/releases/tag/v1.2.3",
+        "upload_url" => "https://test.invalid/repos/owner/my_cli/releases/123/assets{?name,label}"
+      })
+    end
+  end
+
+  defp dispatch_retrying("POST", "/repos/owner/my_cli/releases/123/assets", conn) do
+    respond_json(conn, 201, %{"id" => 1, "name" => "ok"})
+  end
+
+  defp dispatch_retrying(_method, _path, conn) do
+    Plug.Conn.resp(conn, 404, "not found")
+  end
+
   describe "prerelease?/1" do
     test "matches common prerelease tags" do
       assert Publish.prerelease?("v1.0.0-rc.1")
