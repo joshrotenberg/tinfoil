@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.3](https://github.com/joshrotenberg/tinfoil/compare/v0.2.2...v0.2.3) (2026-04-10)
+
+
+### Features
+
+* **publish:** handle existing releases with --replace flag ([#9](https://github.com/joshrotenberg/tinfoil/issues/9)) ([df5354f](https://github.com/joshrotenberg/tinfoil/commit/df5354feffdb23e122163851c75841c2a8782d92))
+
+
+### Bug Fixes
+
+* **archive:** emit executable binaries in release tarballs ([#7](https://github.com/joshrotenberg/tinfoil/issues/7)) ([2c1d1be](https://github.com/joshrotenberg/tinfoil/commit/2c1d1bef88d8ee0e537a507d0bc0c49a6cb2b8e1))
+* **config:** validate archive_name, archive_format, and homebrew tap ([#10](https://github.com/joshrotenberg/tinfoil/issues/10)) ([bcd448b](https://github.com/joshrotenberg/tinfoil/commit/bcd448bbbaed9f023f63a1caf18b18652059c495))
+* **publish:** add retry and upload timeout to the GitHub API client ([#11](https://github.com/joshrotenberg/tinfoil/issues/11)) ([98ccb2a](https://github.com/joshrotenberg/tinfoil/commit/98ccb2aa6c4148adf996c0d1a4481ffe3b8000fd))
+
 ## [0.2.2](https://github.com/joshrotenberg/tinfoil/compare/v0.2.1...v0.2.2) (2026-04-10)
 
 
