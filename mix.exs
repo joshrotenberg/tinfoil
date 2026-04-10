@@ -15,7 +15,8 @@ defmodule Tinfoil.MixProject do
       package: package(),
       source_url: @source_url,
       docs: docs(),
-      name: "tinfoil"
+      name: "tinfoil",
+      dialyzer: dialyzer()
     ]
   end
 
@@ -28,7 +29,17 @@ defmodule Tinfoil.MixProject do
   defp deps do
     [
       {:jason, "~> 1.4"},
-      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev], runtime: false}
+    ]
+  end
+
+  defp dialyzer do
+    [
+      plt_add_apps: [:mix, :eex],
+      plt_file: {:no_warn, "priv/plts/tinfoil.plt"},
+      flags: [:error_handling, :unknown, :underspecs]
     ]
   end
 

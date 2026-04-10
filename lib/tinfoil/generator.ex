@@ -82,22 +82,28 @@ defmodule Tinfoil.Generator do
     root = Keyword.get(opts, :root, File.cwd!())
     force = Keyword.get(opts, :force, true)
 
-    Enum.reduce(render(config), %{written: [], skipped: []}, fn file, acc ->
-      target = Path.join(root, file.path)
-      File.mkdir_p!(Path.dirname(target))
-
-      cond do
-        File.exists?(target) and not force and File.read!(target) != file.contents ->
-          %{acc | skipped: [file.path | acc.skipped]}
-
-        true ->
-          File.write!(target, file.contents)
-          if file.executable, do: File.chmod!(target, 0o755)
-          %{acc | written: [file.path | acc.written]}
-      end
-    end)
+    config
+    |> render()
+    |> Enum.reduce(%{written: [], skipped: []}, &write_one(&1, root, force, &2))
     |> Map.update!(:written, &Enum.reverse/1)
     |> Map.update!(:skipped, &Enum.reverse/1)
+  end
+
+  defp write_one(file, root, force, acc) do
+    target = Path.join(root, file.path)
+    File.mkdir_p!(Path.dirname(target))
+
+    if skip?(target, force, file.contents) do
+      %{acc | skipped: [file.path | acc.skipped]}
+    else
+      File.write!(target, file.contents)
+      if file.executable, do: File.chmod!(target, 0o755)
+      %{acc | written: [file.path | acc.written]}
+    end
+  end
+
+  defp skip?(target, force, contents) do
+    File.exists?(target) and not force and File.read!(target) != contents
   end
 
   ## ───────────── individual template renderers ─────────────
