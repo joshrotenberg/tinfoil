@@ -39,9 +39,9 @@ defmodule Tinfoil.Config do
     checksums: :sha256,
     ci: %{
       provider: :github_actions,
-      elixir_version: "1.18",
+      elixir_version: "1.19",
       otp_version: "28",
-      zig_version: "0.13.0"
+      zig_version: "0.15.2"
     }
   ]
 
