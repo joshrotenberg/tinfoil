@@ -26,6 +26,11 @@ defmodule Mix.Tasks.Tinfoil.Publish do
     * `--tag`       — the release tag, e.g. `v1.2.3`. Defaults to
                       `GITHUB_REF_NAME`, which CI sets for tag pushes.
     * `--draft`     — create the release as a draft
+    * `--replace`   — if a release for this tag already exists,
+                      delete it (and its assets) and create a fresh
+                      one. The git tag itself is untouched. Intended
+                      for development / force-retag iteration loops,
+                      not for released versions.
 
   Pre-release detection is automatic: tags containing `-rc`, `-beta`,
   or `-alpha` are marked as prerelease in the created release.
@@ -39,7 +44,12 @@ defmodule Mix.Tasks.Tinfoil.Publish do
   def run(argv) do
     {opts, _, _} =
       OptionParser.parse(argv,
-        switches: [input_dir: :string, tag: :string, draft: :boolean]
+        switches: [
+          input_dir: :string,
+          tag: :string,
+          draft: :boolean,
+          replace: :boolean
+        ]
       )
 
     config =
@@ -48,7 +58,7 @@ defmodule Mix.Tasks.Tinfoil.Publish do
         {:error, reason} -> Mix.raise("tinfoil config error: #{inspect(reason)}")
       end
 
-    case Publish.publish(config, Keyword.take(opts, [:input_dir, :tag, :draft])) do
+    case Publish.publish(config, Keyword.take(opts, [:input_dir, :tag, :draft, :replace])) do
       {:ok, result} ->
         report(result)
 
@@ -86,6 +96,21 @@ defmodule Mix.Tasks.Tinfoil.Publish do
 
   defp format_error({:create_release_failed, status, body}),
     do: "GitHub refused to create the release (HTTP #{status}): #{inspect(body)}"
+
+  defp format_error(:release_already_exists_no_replace),
+    do:
+      "a release for this tag already exists on GitHub. " <>
+        "Re-run with --replace to delete and recreate it, or push a new tag."
+
+  defp format_error({:find_release_failed, status, body}),
+    do:
+      "couldn't look up the existing release for replacement (HTTP #{status}): " <>
+        inspect(body)
+
+  defp format_error({:delete_release_failed, status, body}),
+    do:
+      "couldn't delete the existing release during --replace (HTTP #{status}): " <>
+        inspect(body)
 
   defp format_error({:upload_failed, name, status, body}),
     do: "upload of #{name} failed (HTTP #{status}): #{inspect(body)}"

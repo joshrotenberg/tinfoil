@@ -19,6 +19,7 @@ defmodule Tinfoil.Publish do
           input_dir: Path.t(),
           tag: String.t() | nil,
           draft: boolean() | nil,
+          replace: boolean() | nil,
           req: Req.Request.t() | nil
         ]
 
@@ -47,6 +48,20 @@ defmodule Tinfoil.Publish do
   otherwise from the `GITHUB_REF_NAME` environment variable (which
   CI sets automatically on tag pushes). Versions matching `-rc`,
   `-beta`, or `-alpha` are auto-marked as prerelease.
+
+  ## Existing releases
+
+  By default, if a release for `tag` already exists, `publish/2`
+  returns `{:error, :release_already_exists_no_replace}` without
+  touching the existing release or its assets — failing fast is
+  safer than silently clobbering something a user already shipped.
+
+  Pass `replace: true` (or `--replace` on the mix task) to delete
+  and recreate the existing release. The git tag itself is never
+  touched; only the release object and its attached assets are
+  removed before the new release is created. Use this primarily
+  for development and force-retag iteration loops, not for published
+  versions.
   """
   @spec publish(Config.t(), opts()) :: {:ok, result()} | {:error, term()}
   def publish(%Config{} = config, opts \\ []) do
@@ -65,7 +80,7 @@ defmodule Tinfoil.Publish do
       _combined = Archive.combined_checksums(input_dir)
       assets = list_assets(input_dir)
 
-      with {:ok, release} <- create_release(req, repo, tag, config, opts),
+      with {:ok, release} <- create_or_replace_release(req, repo, tag, config, opts),
            {:ok, uploaded} <- upload_assets(req, release, assets) do
         {:ok,
          %{
@@ -141,6 +156,68 @@ defmodule Tinfoil.Publish do
              ]
            )}
         end
+    end
+  end
+
+  defp create_or_replace_release(req, repo, tag, config, opts) do
+    case create_release(req, repo, tag, config, opts) do
+      {:ok, release} ->
+        {:ok, release}
+
+      {:error, {:create_release_failed, 422, body}} = err ->
+        if release_already_exists?(body) do
+          handle_existing_release(req, repo, tag, config, opts)
+        else
+          err
+        end
+
+      other ->
+        other
+    end
+  end
+
+  defp handle_existing_release(req, repo, tag, config, opts) do
+    if Keyword.get(opts, :replace, false) do
+      with {:ok, existing} <- find_release_by_tag(req, repo, tag),
+           :ok <- delete_release(req, repo, existing["id"]) do
+        create_release(req, repo, tag, config, opts)
+      end
+    else
+      {:error, :release_already_exists_no_replace}
+    end
+  end
+
+  defp release_already_exists?(%{"errors" => errors}) when is_list(errors) do
+    Enum.any?(errors, fn err ->
+      is_map(err) and err["code"] == "already_exists" and err["field"] == "tag_name"
+    end)
+  end
+
+  defp release_already_exists?(_), do: false
+
+  defp find_release_by_tag(req, repo, tag) do
+    case Req.get(req, url: "/repos/#{repo}/releases/tags/#{tag}") do
+      {:ok, %Req.Response{status: 200, body: release}} ->
+        {:ok, release}
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        {:error, {:find_release_failed, status, body}}
+
+      {:error, reason} ->
+        {:error, {:find_release_error, reason}}
+    end
+  end
+
+  defp delete_release(req, repo, id) do
+    case Req.delete(req, url: "/repos/#{repo}/releases/#{id}") do
+      {:ok, %Req.Response{status: 204}} ->
+        :ok
+
+      {:ok, %Req.Response{status: status, body: body}} ->
+        {:error, {:delete_release_failed, status, body}}
+
+      {:error, reason} ->
+        {:error, {:delete_release_error, reason}}
     end
   end
 
