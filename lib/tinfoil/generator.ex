@@ -108,6 +108,7 @@ defmodule Tinfoil.Generator do
       tinfoil_version: tinfoil_version(),
       app: config.app,
       targets: config.targets,
+      burrito_names: config.burrito_names,
       ci: config.ci,
       github: config.github,
       homebrew: config.homebrew,

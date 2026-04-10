@@ -16,6 +16,7 @@ defmodule Tinfoil.Plan do
 
   @type target_plan :: %{
           target: Target.target(),
+          burrito_name: atom(),
           runner: String.t(),
           triple: String.t(),
           burrito_os: atom(),
@@ -78,6 +79,7 @@ defmodule Tinfoil.Plan do
 
     %{
       target: target,
+      burrito_name: Map.fetch!(config.burrito_names, target),
       runner: spec.runner,
       triple: spec.triple,
       burrito_os: spec.burrito_os,

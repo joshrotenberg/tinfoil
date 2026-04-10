@@ -11,6 +11,7 @@ defmodule Tinfoil.GeneratorTest do
         description: "A test CLI",
         homepage_url: "https://example.com/my_cli",
         package: [licenses: ["MIT"]],
+        releases: default_releases(),
         tinfoil:
           Keyword.merge(
             [targets: [:darwin_arm64, :darwin_x86_64, :linux_x86_64, :linux_arm64]],
@@ -21,6 +22,22 @@ defmodule Tinfoil.GeneratorTest do
     {:ok, config} = Config.load(project)
     # Force a repo so generators don't call git.
     %{config | github: %{config.github | repo: "owner/my_cli"}}
+  end
+
+  defp default_releases do
+    [
+      my_cli: [
+        steps: [:assemble],
+        burrito: [
+          targets: [
+            darwin_arm64: [os: :darwin, cpu: :aarch64],
+            darwin_x86_64: [os: :darwin, cpu: :x86_64],
+            linux_x86_64: [os: :linux, cpu: :x86_64],
+            linux_arm64: [os: :linux, cpu: :aarch64]
+          ]
+        ]
+      ]
+    ]
   end
 
   describe "render/1" do
@@ -111,6 +128,39 @@ defmodule Tinfoil.GeneratorTest do
         |> Generator.render_workflow()
 
       assert yaml =~ ~s(BASENAME="{app}_v{version}_{target}")
+    end
+
+    test "workflow uses matrix.burrito_name for BURRITO_TARGET and the binary path" do
+      yaml = build_config() |> Generator.render_workflow()
+
+      assert yaml =~ "BURRITO_TARGET: ${{ matrix.burrito_name }}"
+      assert yaml =~ ~s(BIN="burrito_out/${APP_NAME}_${BURRITO_NAME}")
+    end
+
+    test "workflow matrix entries include burrito_name mapped from the user's release config" do
+      project = [
+        app: :my_cli,
+        version: "1.2.3",
+        package: [licenses: ["MIT"]],
+        releases: [
+          my_cli: [
+            burrito: [
+              targets: [
+                macos_m1: [os: :darwin, cpu: :aarch64],
+                linux: [os: :linux, cpu: :x86_64]
+              ]
+            ]
+          ]
+        ],
+        tinfoil: [targets: [:darwin_arm64, :linux_x86_64]]
+      ]
+
+      {:ok, config} = Config.load(project)
+      config = %{config | github: %{config.github | repo: "owner/my_cli"}}
+      yaml = Generator.render_workflow(config)
+
+      assert yaml =~ "burrito_name: macos_m1"
+      assert yaml =~ "burrito_name: linux"
     end
   end
 

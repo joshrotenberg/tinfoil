@@ -3,21 +3,42 @@ defmodule Tinfoil.ConfigTest do
 
   alias Tinfoil.Config
 
-  defp base_project(tinfoil_opts) do
+  defp base_project(tinfoil_opts, opts \\ []) do
+    releases = Keyword.get(opts, :releases, default_releases())
+
     [
       app: :my_cli,
       version: "1.2.3",
       description: "A test CLI",
       homepage_url: "https://example.com/my_cli",
       package: [licenses: ["Apache-2.0"]],
+      releases: releases,
       tinfoil: tinfoil_opts
+    ]
+  end
+
+  # Burrito targets using tinfoil's own atom names — keeps default-case
+  # assertions trivial (burrito_name == tinfoil target atom).
+  defp default_releases do
+    [
+      my_cli: [
+        steps: [:assemble],
+        burrito: [
+          targets: [
+            darwin_arm64: [os: :darwin, cpu: :aarch64],
+            darwin_x86_64: [os: :darwin, cpu: :x86_64],
+            linux_x86_64: [os: :linux, cpu: :x86_64],
+            linux_arm64: [os: :linux, cpu: :aarch64]
+          ]
+        ]
+      ]
     ]
   end
 
   describe "load/1" do
     test "returns an error when no :tinfoil key is present" do
       assert {:error, :missing_tinfoil_config} =
-               Config.load(app: :my_cli, version: "1.0.0")
+               Config.load(app: :my_cli, version: "1.0.0", releases: default_releases())
     end
 
     test "returns an error when targets are missing" do
@@ -43,6 +64,7 @@ defmodule Tinfoil.ConfigTest do
       assert config.homepage_url == "https://example.com/my_cli"
       assert config.license == "Apache-2.0"
       assert config.targets == [:darwin_arm64, :linux_x86_64]
+      assert config.burrito_names == %{darwin_arm64: :darwin_arm64, linux_x86_64: :linux_x86_64}
       assert config.archive_name == "{app}-{version}-{target}"
       assert config.archive_format == :tar_gz
       assert config.checksums == :sha256
@@ -53,6 +75,58 @@ defmodule Tinfoil.ConfigTest do
       assert config.installer.install_dir == "~/.local/bin"
       assert config.ci.elixir_version == "1.18"
       assert config.ci.zig_version == "0.13.0"
+    end
+
+    test "resolves burrito_names from the user's release config" do
+      woof_style = [
+        my_cli: [
+          burrito: [
+            targets: [
+              macos: [os: :darwin, cpu: :x86_64],
+              macos_m1: [os: :darwin, cpu: :aarch64],
+              linux: [os: :linux, cpu: :x86_64]
+            ]
+          ]
+        ]
+      ]
+
+      {:ok, config} =
+        Config.load(
+          base_project(
+            [targets: [:darwin_arm64, :darwin_x86_64, :linux_x86_64]],
+            releases: woof_style
+          )
+        )
+
+      assert config.burrito_names == %{
+               darwin_arm64: :macos_m1,
+               darwin_x86_64: :macos,
+               linux_x86_64: :linux
+             }
+    end
+
+    test "errors when a tinfoil target has no matching burrito target" do
+      linux_only = [
+        my_cli: [burrito: [targets: [linux: [os: :linux, cpu: :x86_64]]]]
+      ]
+
+      assert {:error, {:no_matching_burrito_target, :darwin_arm64}} =
+               Config.load(
+                 base_project(
+                   [targets: [:darwin_arm64, :linux_x86_64]],
+                   releases: linux_only
+                 )
+               )
+    end
+
+    test "errors when :releases is missing entirely" do
+      project = [
+        app: :my_cli,
+        version: "1.0.0",
+        tinfoil: [targets: [:darwin_arm64]]
+      ]
+
+      assert {:error, :missing_releases} = Config.load(project)
     end
 
     test "merges user overrides with defaults" do
@@ -113,6 +187,21 @@ defmodule Tinfoil.ConfigTest do
     test "raises a readable error on invalid config" do
       assert_raise ArgumentError, ~r/unknown tinfoil targets/, fn ->
         Config.load!(base_project(targets: [:windows_x86_64]))
+      end
+    end
+
+    test "raises a readable error when a burrito target can't be matched" do
+      linux_only = [
+        my_cli: [burrito: [targets: [linux: [os: :linux, cpu: :x86_64]]]]
+      ]
+
+      assert_raise ArgumentError, ~r/no matching Burrito target/, fn ->
+        Config.load!(
+          base_project(
+            [targets: [:darwin_arm64]],
+            releases: linux_only
+          )
+        )
       end
     end
   end

@@ -10,6 +10,7 @@ defmodule Tinfoil.PlanTest do
         version: "1.2.3",
         description: "A test CLI",
         package: [licenses: ["MIT"]],
+        releases: default_releases(),
         tinfoil:
           Keyword.merge(
             [targets: [:darwin_arm64, :darwin_x86_64, :linux_x86_64, :linux_arm64]],
@@ -21,6 +22,24 @@ defmodule Tinfoil.PlanTest do
     # Pin the inferred github repo so tests are deterministic regardless
     # of the environment's git remote.
     %{config | github: %{config.github | repo: "owner/my_cli"}}
+  end
+
+  # Burrito targets using tinfoil's own atom names, so burrito_name
+  # matches the tinfoil target atom in default-case assertions.
+  defp default_releases do
+    [
+      my_cli: [
+        steps: [:assemble],
+        burrito: [
+          targets: [
+            darwin_arm64: [os: :darwin, cpu: :aarch64],
+            darwin_x86_64: [os: :darwin, cpu: :x86_64],
+            linux_x86_64: [os: :linux, cpu: :x86_64],
+            linux_arm64: [os: :linux, cpu: :aarch64]
+          ]
+        ]
+      ]
+    ]
   end
 
   describe "build/1" do
@@ -44,12 +63,42 @@ defmodule Tinfoil.PlanTest do
       [entry] = plan.targets
 
       assert entry.target == :darwin_arm64
+      assert entry.burrito_name == :darwin_arm64
       assert entry.runner == "macos-latest"
       assert entry.triple == "aarch64-apple-darwin"
       assert entry.burrito_os == :darwin
       assert entry.burrito_cpu == :aarch64
       assert entry.os_family == :darwin
       assert entry.archive == "my_cli-1.2.3-aarch64-apple-darwin.tar.gz"
+    end
+
+    test "burrito_name reflects the user's chosen release target names" do
+      project = [
+        app: :my_cli,
+        version: "1.2.3",
+        package: [licenses: ["MIT"]],
+        releases: [
+          my_cli: [
+            burrito: [
+              targets: [
+                macos_m1: [os: :darwin, cpu: :aarch64],
+                linux: [os: :linux, cpu: :x86_64]
+              ]
+            ]
+          ]
+        ],
+        tinfoil: [targets: [:darwin_arm64, :linux_x86_64]]
+      ]
+
+      {:ok, config} = Config.load(project)
+      config = %{config | github: %{config.github | repo: "owner/my_cli"}}
+      plan = Plan.build(config)
+
+      [darwin, linux] = plan.targets
+      assert darwin.target == :darwin_arm64
+      assert darwin.burrito_name == :macos_m1
+      assert linux.target == :linux_x86_64
+      assert linux.burrito_name == :linux
     end
 
     test "archive filenames respect a custom archive_name template" do
@@ -97,7 +146,16 @@ defmodule Tinfoil.PlanTest do
       matrix = build_config(targets: [:darwin_arm64]) |> Plan.build() |> Plan.matrix()
       [entry] = matrix.include
 
-      for key <- [:target, :runner, :triple, :burrito_os, :burrito_cpu, :os_family, :archive] do
+      for key <- [
+            :target,
+            :burrito_name,
+            :runner,
+            :triple,
+            :burrito_os,
+            :burrito_cpu,
+            :os_family,
+            :archive
+          ] do
         assert Map.has_key?(entry, key), "missing key #{inspect(key)}"
       end
     end
@@ -149,6 +207,17 @@ defmodule Tinfoil.PlanTest do
       assert out =~ "aarch64-unknown-linux-musl"
       assert out =~ "macos-latest"
       assert out =~ "ubuntu-24.04-arm"
+    end
+
+    test "shows the burrito column and burrito_name values" do
+      out =
+        build_config()
+        |> Plan.build()
+        |> Mix.Tasks.Tinfoil.Plan.render_human()
+
+      assert out =~ "burrito"
+      # Default-case base_project uses tinfoil atoms as burrito names.
+      assert out =~ "darwin_arm64"
     end
 
     test "shows 'disabled' for disabled extras" do

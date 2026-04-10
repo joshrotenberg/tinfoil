@@ -20,9 +20,9 @@ defmodule Tinfoil.Config do
   project where possible.
   """
 
-  alias Tinfoil.Target
+  alias Tinfoil.{Burrito, Target}
 
-  @enforce_keys [:app, :version, :targets]
+  @enforce_keys [:app, :version, :targets, :burrito_names]
   defstruct [
     :app,
     :version,
@@ -30,6 +30,7 @@ defmodule Tinfoil.Config do
     :homepage_url,
     :license,
     :targets,
+    :burrito_names,
     archive_name: "{app}-{version}-{target}",
     archive_format: :tar_gz,
     github: %{repo: nil, draft: false},
@@ -51,6 +52,7 @@ defmodule Tinfoil.Config do
           homepage_url: String.t() | nil,
           license: String.t() | nil,
           targets: [Target.target()],
+          burrito_names: %{Target.target() => atom()},
           archive_name: String.t(),
           archive_format: :tar_gz | :zip,
           github: map(),
@@ -68,16 +70,21 @@ defmodule Tinfoil.Config do
   """
   @spec load(keyword()) :: {:ok, t()} | {:error, term()}
   def load(project) when is_list(project) do
+    app = Keyword.fetch!(project, :app)
+
     with {:ok, tinfoil} <- fetch_tinfoil(project),
          {:ok, targets} <- fetch_targets(tinfoil),
-         :ok <- Target.validate(targets) do
+         :ok <- Target.validate(targets),
+         {:ok, burrito_targets} <- Burrito.extract_targets(project, app),
+         {:ok, burrito_names} <- Burrito.resolve_all(targets, burrito_targets) do
       config = %__MODULE__{
-        app: Keyword.fetch!(project, :app),
+        app: app,
         version: Keyword.fetch!(project, :version),
         description: Keyword.get(project, :description),
         homepage_url: Keyword.get(project, :homepage_url),
         license: extract_license(project),
         targets: targets,
+        burrito_names: burrito_names,
         archive_name: Keyword.get(tinfoil, :archive_name, "{app}-{version}-{target}"),
         archive_format: Keyword.get(tinfoil, :archive_format, :tar_gz),
         github: merge_github(Keyword.get(tinfoil, :github, [])),
@@ -242,6 +249,49 @@ defmodule Tinfoil.Config do
   defp format_error({:unknown_targets, bad}) do
     "unknown tinfoil targets: #{inspect(bad)}. " <>
       "Valid targets: #{inspect(Target.all())}"
+  end
+
+  defp format_error(:missing_releases),
+    do:
+      "no :releases block found in mix.exs — tinfoil requires a Burrito " <>
+        "release config. See https://github.com/burrito-elixir/burrito#usage"
+
+  defp format_error(:releases_empty_or_invalid),
+    do: ":releases must be a non-empty keyword list of release configurations"
+
+  defp format_error(:missing_burrito_in_release),
+    do:
+      "the selected release has no :burrito key — add a " <>
+        "burrito: [targets: [...]] block inside the release options"
+
+  defp format_error(:burrito_not_keyword_list),
+    do: ":burrito must be a keyword list"
+
+  defp format_error(:missing_burrito_targets),
+    do: ":burrito block has no :targets list"
+
+  defp format_error(:burrito_targets_empty_or_invalid),
+    do: ":burrito :targets must be a non-empty keyword list"
+
+  defp format_error(:burrito_targets_malformed),
+    do: ":burrito :targets entries must be `name: [os: atom, cpu: atom]`"
+
+  defp format_error({:invalid_burrito_target, name}),
+    do:
+      "Burrito target #{inspect(name)} is missing :os or :cpu — " <>
+        "each target must be `name: [os: atom, cpu: atom]`"
+
+  defp format_error({:multiple_releases_no_match, names, app}),
+    do:
+      "multiple releases in mix.exs (#{inspect(names)}) but none named #{inspect(app)}. " <>
+        "Either name a release after the app or keep a single release."
+
+  defp format_error({:no_matching_burrito_target, target}) do
+    spec = Target.spec!(target)
+
+    "tinfoil target #{inspect(target)} has no matching Burrito target " <>
+      "(looking for [os: #{inspect(spec.burrito_os)}, cpu: #{inspect(spec.burrito_cpu)}]). " <>
+      "Add a matching entry to your :burrito :targets in mix.exs."
   end
 
   defp format_error(other), do: "invalid tinfoil config: #{inspect(other)}"

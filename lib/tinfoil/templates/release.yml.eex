@@ -19,8 +19,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:<%= for target <- @targets do %><% spec = Tinfoil.Target.spec!(target) %>
+        include:<%= for target <- @targets do %><% spec = Tinfoil.Target.spec!(target) %><% burrito_name = Map.fetch!(@burrito_names, target) %>
           - target: <%= target %>
+            burrito_name: <%= burrito_name %>
             runner: <%= spec.runner %>
             triple: <%= spec.triple %>
             burrito_os: <%= spec.burrito_os %>
@@ -55,7 +56,7 @@ jobs:
 
       - name: Build Burrito release
         env:
-          BURRITO_TARGET: ${{ matrix.target }}
+          BURRITO_TARGET: ${{ matrix.burrito_name }}
         run: mix release
 
       - name: Package archive
@@ -65,29 +66,23 @@ jobs:
           mkdir -p _tinfoil
           VERSION="${{ steps.version.outputs.version }}"
           TRIPLE="${{ matrix.triple }}"
+          BURRITO_NAME="${{ matrix.burrito_name }}"
           BASENAME="<%= @archive_basename_template %>"
           BASENAME="${BASENAME//\{app\}/$APP_NAME}"
           BASENAME="${BASENAME//\{version\}/$VERSION}"
           BASENAME="${BASENAME//\{target\}/$TRIPLE}"
           ARCHIVE="${BASENAME}<%= @archive_ext %>"
 
-          # Burrito writes binaries to burrito_out/
-          cd burrito_out
-          # The binary is named after the app; may have a target suffix.
-          BIN="$APP_NAME"
+          # Burrito writes binaries to burrito_out/<app>_<burrito_target_name>.
+          BIN="burrito_out/${APP_NAME}_${BURRITO_NAME}"
           if [ ! -f "$BIN" ]; then
-            # Burrito sometimes emits <app>_<target>; pick the first match.
-            BIN=$(ls ${APP_NAME}* 2>/dev/null | head -n1)
-          fi
-          if [ -z "${BIN:-}" ] || [ ! -f "$BIN" ]; then
-            echo "::error::No Burrito output found in burrito_out/"
-            ls -la
+            echo "::error::No Burrito output at ${BIN}"
+            ls -la burrito_out/ || true
             exit 1
           fi
 
           # Normalize the binary name in the archive to the app name.
-          cp "$BIN" "../_tinfoil/${APP_NAME}"
-          cd ..
+          cp "$BIN" "_tinfoil/${APP_NAME}"
           tar -C _tinfoil -czf "_tinfoil/${ARCHIVE}" "${APP_NAME}"
           rm "_tinfoil/${APP_NAME}"
 

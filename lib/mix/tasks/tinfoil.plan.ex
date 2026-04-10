@@ -86,10 +86,10 @@ defmodule Mix.Tasks.Tinfoil.Plan do
   defp target_table(targets) do
     rows =
       Enum.map(targets, fn t ->
-        [to_string(t.target), t.runner, t.archive]
+        [to_string(t.target), to_string(t.burrito_name), t.runner, t.archive]
       end)
 
-    headers = ["target", "runner", "archive"]
+    headers = ["target", "burrito", "runner", "archive"]
     widths = column_widths([headers | rows])
     separator = "  " <> Enum.map_join(widths, "  ", &String.duplicate("─", &1))
 
