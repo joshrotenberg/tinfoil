@@ -73,8 +73,47 @@ defmodule Tinfoil.ConfigTest do
       assert config.homebrew.formula_name == "my_cli"
       assert config.installer.enabled == false
       assert config.installer.install_dir == "~/.local/bin"
-      assert config.ci.elixir_version == "1.18"
-      assert config.ci.zig_version == "0.13.0"
+      assert config.ci.elixir_version == "1.19"
+      assert config.ci.zig_version == "0.15.2"
+    end
+
+    test "infers ci.elixir_version from the project's :elixir requirement" do
+      for {req, expected} <- [
+            {"~> 1.19", "1.19"},
+            {"~> 1.17.0", "1.17"},
+            {">= 1.15", "1.15"},
+            {"1.16.3", "1.16"}
+          ] do
+        project =
+          base_project(targets: [:darwin_arm64, :linux_x86_64])
+          |> Keyword.put(:elixir, req)
+
+        {:ok, config} = Config.load(project)
+
+        assert config.ci.elixir_version == expected,
+               "expected #{inspect(req)} -> #{inspect(expected)}, got #{inspect(config.ci.elixir_version)}"
+      end
+    end
+
+    test "ci.elixir_version falls back when project :elixir is absent or unparseable" do
+      {:ok, config} =
+        Config.load(base_project(targets: [:darwin_arm64, :linux_x86_64]))
+
+      # base_project has no :elixir, so we get the fallback
+      assert config.ci.elixir_version == "1.19"
+    end
+
+    test "explicit ci.elixir_version override beats auto-detection" do
+      project =
+        base_project(
+          targets: [:darwin_arm64, :linux_x86_64],
+          ci: [elixir_version: "1.16"]
+        )
+        |> Keyword.put(:elixir, "~> 1.19")
+
+      {:ok, config} = Config.load(project)
+
+      assert config.ci.elixir_version == "1.16"
     end
 
     test "resolves burrito_names from the user's release config" do
@@ -150,7 +189,7 @@ defmodule Tinfoil.ConfigTest do
       assert config.ci.elixir_version == "1.17"
       assert config.ci.otp_version == "27"
       # unchanged defaults
-      assert config.ci.zig_version == "0.13.0"
+      assert config.ci.zig_version == "0.15.2"
     end
   end
 

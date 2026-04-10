@@ -91,7 +91,7 @@ defmodule Tinfoil.Config do
         homebrew: merge_homebrew(Keyword.get(tinfoil, :homebrew, []), project),
         installer: merge_installer(Keyword.get(tinfoil, :installer, [])),
         checksums: Keyword.get(tinfoil, :checksums, :sha256),
-        ci: merge_ci(Keyword.get(tinfoil, :ci, []))
+        ci: merge_ci(Keyword.get(tinfoil, :ci, []), project)
       }
 
       {:ok, config}
@@ -191,15 +191,33 @@ defmodule Tinfoil.Config do
     Map.merge(defaults, Map.new(user))
   end
 
-  defp merge_ci(user) do
+  defp merge_ci(user, project) do
     defaults = %{
       provider: :github_actions,
-      elixir_version: "1.18",
+      elixir_version: infer_elixir_version(project),
       otp_version: "28",
-      zig_version: "0.13.0"
+      zig_version: "0.15.2"
     }
 
     Map.merge(defaults, Map.new(user))
+  end
+
+  # Parse the user's mix.exs :elixir requirement (e.g. "~> 1.19", ">= 1.15.0")
+  # into a "MAJOR.MINOR" string suitable for erlef/setup-beam. Falls back to
+  # the current latest stable when the requirement can't be parsed.
+  @fallback_elixir_version "1.19"
+
+  defp infer_elixir_version(project) do
+    case Keyword.get(project, :elixir) do
+      req when is_binary(req) ->
+        case Regex.run(~r/(\d+\.\d+)/, req) do
+          [_, version] -> version
+          _ -> @fallback_elixir_version
+        end
+
+      _ ->
+        @fallback_elixir_version
+    end
   end
 
   @doc false
