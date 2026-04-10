@@ -138,6 +138,20 @@ defmodule Tinfoil.GeneratorTest do
       refute yaml =~ "softprops/action-gh-release"
     end
 
+    test "build job caches deps per matrix target" do
+      yaml = build_config() |> Generator.render_workflow()
+
+      assert yaml =~ "actions/cache@v4"
+      # Build cache key includes the matrix target so each runner has its own
+      assert yaml =~ ~s(key: ${{ runner.os }}-${{ matrix.target }}-mix-)
+    end
+
+    test "release job caches deps separately from build" do
+      yaml = build_config() |> Generator.render_workflow()
+
+      assert yaml =~ ~s(key: ${{ runner.os }}-release-mix-)
+    end
+
     test "workflow adds --draft when github.draft is true" do
       yaml =
         build_config(
