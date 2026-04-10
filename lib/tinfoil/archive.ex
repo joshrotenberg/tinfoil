@@ -15,22 +15,45 @@ defmodule Tinfoil.Archive do
   Create `<output_dir>/<archive_basename>.tar.gz` containing the file
   at `binary_path`, renamed to `to_string(app)` inside the archive.
 
+  The archive entry is written with mode `0755` so the extracted
+  binary is executable without the user needing a manual `chmod +x`.
+  This matters for anyone who downloads the tarball directly — the
+  installer script does its own chmod, but a plain `tar -xzf` extract
+  should produce something runnable.
+
   Returns the path to the written archive.
   """
   @spec tar_gz(Path.t(), atom(), String.t(), Path.t()) :: Path.t()
   def tar_gz(binary_path, app, archive_basename, output_dir) do
     File.mkdir_p!(output_dir)
     archive_path = Path.join(output_dir, archive_basename <> ".tar.gz")
+    name_in_archive = to_string(app)
 
-    name_in_archive = to_charlist(to_string(app))
-    binary = File.read!(binary_path)
+    # Stage the binary in a temp file with the executable bit set, then
+    # use :erl_tar's filesystem form. :erl_tar.add reads mode/atime/mtime
+    # from stat(2), so the archive entry inherits the staged file's 0755.
+    # The {name, binary} form of :erl_tar.create uses a hardcoded 0644
+    # and produces a non-executable entry — see tinfoil#<issue>.
+    stage = Path.join(output_dir, ".tinfoil_stage_" <> name_in_archive)
 
-    :ok =
-      :erl_tar.create(
-        String.to_charlist(archive_path),
-        [{name_in_archive, binary}],
-        [:compressed]
-      )
+    try do
+      File.cp!(binary_path, stage)
+      File.chmod!(stage, 0o755)
+
+      {:ok, tar} = :erl_tar.open(String.to_charlist(archive_path), [:write, :compressed])
+
+      :ok =
+        :erl_tar.add(
+          tar,
+          String.to_charlist(stage),
+          String.to_charlist(name_in_archive),
+          []
+        )
+
+      :ok = :erl_tar.close(tar)
+    after
+      File.rm(stage)
+    end
 
     archive_path
   end

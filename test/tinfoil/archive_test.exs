@@ -31,6 +31,54 @@ defmodule Tinfoil.ArchiveTest do
       assert File.exists?(extracted)
       assert File.read!(extracted) == "fake-burrito-binary-bytes"
     end
+
+    @tag :tmp_dir
+    test "extracted binary preserves executable mode (0755)", %{tmp_dir: tmp} do
+      # Source binary intentionally non-executable to prove tar_gz forces
+      # the mode up — Burrito's real output is 0755, but tinfoil shouldn't
+      # trust that and should emit an executable archive entry regardless.
+      binary_path = Path.join(tmp, "woof_linux")
+      File.write!(binary_path, "not-executable-at-source")
+      File.chmod!(binary_path, 0o644)
+
+      output_dir = Path.join(tmp, "out")
+
+      Archive.tar_gz(binary_path, :woof, "woof-0.1.0-x86_64-unknown-linux-musl", output_dir)
+
+      archive = Path.join(output_dir, "woof-0.1.0-x86_64-unknown-linux-musl.tar.gz")
+      extract_dir = Path.join(tmp, "extracted")
+      File.mkdir_p!(extract_dir)
+
+      :ok =
+        :erl_tar.extract(String.to_charlist(archive), [
+          :compressed,
+          {:cwd, String.to_charlist(extract_dir)}
+        ])
+
+      extracted = Path.join(extract_dir, "woof")
+      %File.Stat{mode: mode} = File.stat!(extracted)
+
+      # mode is stored as decimal; mask out file-type bits and assert the
+      # "executable by owner" bit is set
+      assert Bitwise.band(mode, 0o100) != 0,
+             "expected extracted binary to be owner-executable, got mode #{Integer.to_string(mode, 8)}"
+    end
+
+    @tag :tmp_dir
+    test "leaves no stage file behind on success", %{tmp_dir: tmp} do
+      binary_path = Path.join(tmp, "app_target")
+      File.write!(binary_path, "bytes")
+
+      output_dir = Path.join(tmp, "out")
+      Archive.tar_gz(binary_path, :app, "app-1.0.0-linux", output_dir)
+
+      stage_files =
+        output_dir
+        |> Path.join(".tinfoil_stage_*")
+        |> Path.wildcard()
+
+      assert stage_files == []
+    end
   end
 
   describe "sha256/1" do
