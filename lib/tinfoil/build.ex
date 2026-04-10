@@ -79,7 +79,10 @@ defmodule Tinfoil.Build do
 
   defp run_release(burrito_name) do
     System.put_env("BURRITO_TARGET", to_string(burrito_name))
-    Mix.Task.run("release", [])
+    # --overwrite keeps mix release from prompting when an existing
+    # release directory is present. tinfoil is an automation tool —
+    # a prompt hang would deadlock CI without any useful signal.
+    Mix.Task.run("release", ["--overwrite"])
     Mix.Task.reenable("release")
   end
 end
