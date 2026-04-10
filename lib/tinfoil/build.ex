@@ -52,7 +52,12 @@ defmodule Tinfoil.Build do
     output_dir = Keyword.get(opts, :output_dir, @default_output_dir)
     burrito_name = Map.fetch!(config.burrito_names, target)
 
-    if not skip_release, do: run_release(burrito_name)
+    info(["* tinfoil building ", to_string(target), " (burrito: ", to_string(burrito_name), ")"])
+
+    if not skip_release do
+      info("* running mix release")
+      run_release(burrito_name)
+    end
 
     binary = Path.join("burrito_out", "#{config.app}_#{burrito_name}")
 
@@ -61,6 +66,7 @@ defmodule Tinfoil.Build do
               "Did `mix release` succeed for BURRITO_TARGET=#{burrito_name}?"
     end
 
+    info(["* packaging ", binary])
     archive_basename = Config.archive_basename(config, target)
     archive = Archive.tar_gz(binary, config.app, archive_basename, output_dir)
     {sha, sidecar} = Archive.sha256(archive)
@@ -84,5 +90,9 @@ defmodule Tinfoil.Build do
     # a prompt hang would deadlock CI without any useful signal.
     Mix.Task.run("release", ["--overwrite"])
     Mix.Task.reenable("release")
+  end
+
+  defp info(message) do
+    Mix.shell().info([:cyan, message, :reset])
   end
 end

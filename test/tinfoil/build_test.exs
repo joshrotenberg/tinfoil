@@ -1,7 +1,17 @@
 defmodule Tinfoil.BuildTest do
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureIO, only: [with_io: 1]
+
   alias Tinfoil.{Build, Config}
+
+  # Build.run emits progress via Mix.shell().info. with_io keeps that
+  # noise out of the ExUnit output while still letting us assert on the
+  # underlying return value.
+  defp capture(fun) do
+    {result, _output} = with_io(fun)
+    result
+  end
 
   defp build_config(targets) do
     project = [
@@ -39,12 +49,14 @@ defmodule Tinfoil.BuildTest do
 
       # Build.run uses relative paths for burrito_out, so we chdir.
       result =
-        File.cd!(tmp, fn ->
-          Build.run(config,
-            target: :darwin_arm64,
-            skip_release: true,
-            output_dir: "_tinfoil"
-          )
+        capture(fn ->
+          File.cd!(tmp, fn ->
+            Build.run(config,
+              target: :darwin_arm64,
+              skip_release: true,
+              output_dir: "_tinfoil"
+            )
+          end)
         end)
 
       assert result.target == :darwin_arm64
@@ -67,15 +79,17 @@ defmodule Tinfoil.BuildTest do
 
       File.mkdir_p!(Path.join(tmp, "burrito_out"))
 
-      assert_raise RuntimeError, ~r/no Burrito output at/, fn ->
-        File.cd!(tmp, fn ->
-          Build.run(config,
-            target: :linux_x86_64,
-            skip_release: true,
-            output_dir: "_tinfoil"
-          )
-        end)
-      end
+      capture(fn ->
+        assert_raise RuntimeError, ~r/no Burrito output at/, fn ->
+          File.cd!(tmp, fn ->
+            Build.run(config,
+              target: :linux_x86_64,
+              skip_release: true,
+              output_dir: "_tinfoil"
+            )
+          end)
+        end
+      end)
     end
 
     @tag :tmp_dir
@@ -102,8 +116,10 @@ defmodule Tinfoil.BuildTest do
       File.write!(Path.join(burrito_out, "woof_macos_m1"), "bytes")
 
       result =
-        File.cd!(tmp, fn ->
-          Build.run(config, target: :darwin_arm64, skip_release: true, output_dir: "_tinfoil")
+        capture(fn ->
+          File.cd!(tmp, fn ->
+            Build.run(config, target: :darwin_arm64, skip_release: true, output_dir: "_tinfoil")
+          end)
         end)
 
       assert result.burrito_name == :macos_m1
