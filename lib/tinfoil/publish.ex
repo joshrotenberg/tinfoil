@@ -15,6 +15,16 @@ defmodule Tinfoil.Publish do
 
   @github_api "https://api.github.com"
 
+  # Default request timeouts and retry policy for the GitHub API client.
+  # Asset uploads in particular can be 50+ MB on slow CI networks, so the
+  # default 15s receive_timeout is too short. retry: :transient retries on
+  # 408/429/500/502/503/504 and transport errors across all HTTP methods
+  # (including POSTs). The duplicate-POST edge case a retry could cause is
+  # already covered by the existing "release already exists" handling and
+  # --replace escape hatch.
+  @receive_timeout :timer.minutes(5)
+  @pool_timeout :timer.seconds(30)
+
   @type opts :: [
           input_dir: Path.t(),
           tag: String.t() | nil,
@@ -153,7 +163,11 @@ defmodule Tinfoil.Publish do
                {"x-github-api-version", "2022-11-28"},
                {"authorization", "Bearer #{token}"},
                {"user-agent", "tinfoil/#{tinfoil_version()}"}
-             ]
+             ],
+             receive_timeout: @receive_timeout,
+             pool_timeout: @pool_timeout,
+             retry: :transient,
+             max_retries: 3
            )}
         end
     end
