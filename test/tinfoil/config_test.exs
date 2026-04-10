@@ -158,6 +158,83 @@ defmodule Tinfoil.ConfigTest do
                )
     end
 
+    test "errors when :archive_name is missing the {target} token" do
+      assert {:error, {:archive_name_missing_target_token, "my_cli-{version}"}} =
+               Config.load(
+                 base_project(
+                   targets: [:darwin_arm64, :linux_x86_64],
+                   archive_name: "my_cli-{version}"
+                 )
+               )
+    end
+
+    test "errors when :archive_name is not a string" do
+      assert {:error, :archive_name_not_string} =
+               Config.load(
+                 base_project(
+                   targets: [:darwin_arm64],
+                   archive_name: :an_atom
+                 )
+               )
+    end
+
+    test "errors when :archive_format is not supported" do
+      assert {:error, {:invalid_archive_format, :rar}} =
+               Config.load(
+                 base_project(
+                   targets: [:darwin_arm64],
+                   archive_format: :rar
+                 )
+               )
+    end
+
+    test "accepts :tar_gz and :zip as archive formats" do
+      for fmt <- [:tar_gz, :zip] do
+        {:ok, config} =
+          Config.load(
+            base_project(
+              targets: [:darwin_arm64],
+              archive_format: fmt
+            )
+          )
+
+        assert config.archive_format == fmt
+      end
+    end
+
+    test "errors when :homebrew is enabled without a tap" do
+      assert {:error, :homebrew_enabled_without_tap} =
+               Config.load(
+                 base_project(
+                   targets: [:darwin_arm64],
+                   homebrew: [enabled: true]
+                 )
+               )
+    end
+
+    test "errors when :homebrew is enabled with an empty tap string" do
+      assert {:error, :homebrew_enabled_without_tap} =
+               Config.load(
+                 base_project(
+                   targets: [:darwin_arm64],
+                   homebrew: [enabled: true, tap: ""]
+                 )
+               )
+    end
+
+    test "accepts :homebrew enabled with a non-empty tap" do
+      {:ok, config} =
+        Config.load(
+          base_project(
+            targets: [:darwin_arm64],
+            homebrew: [enabled: true, tap: "owner/homebrew-tap"]
+          )
+        )
+
+      assert config.homebrew.enabled == true
+      assert config.homebrew.tap == "owner/homebrew-tap"
+    end
+
     test "errors when :releases is missing entirely" do
       project = [
         app: :my_cli,

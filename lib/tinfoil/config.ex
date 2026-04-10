@@ -75,6 +75,9 @@ defmodule Tinfoil.Config do
     with {:ok, tinfoil} <- fetch_tinfoil(project),
          {:ok, targets} <- fetch_targets(tinfoil),
          :ok <- Target.validate(targets),
+         {:ok, archive_name} <- fetch_archive_name(tinfoil),
+         {:ok, archive_format} <- fetch_archive_format(tinfoil),
+         {:ok, homebrew} <- fetch_homebrew(tinfoil, project),
          {:ok, burrito_targets} <- Burrito.extract_targets(project, app),
          {:ok, burrito_names} <- Burrito.resolve_all(targets, burrito_targets) do
       config = %__MODULE__{
@@ -85,10 +88,10 @@ defmodule Tinfoil.Config do
         license: extract_license(project),
         targets: targets,
         burrito_names: burrito_names,
-        archive_name: Keyword.get(tinfoil, :archive_name, "{app}-{version}-{target}"),
-        archive_format: Keyword.get(tinfoil, :archive_format, :tar_gz),
+        archive_name: archive_name,
+        archive_format: archive_format,
         github: merge_github(Keyword.get(tinfoil, :github, [])),
-        homebrew: merge_homebrew(Keyword.get(tinfoil, :homebrew, []), project),
+        homebrew: homebrew,
         installer: merge_installer(Keyword.get(tinfoil, :installer, [])),
         checksums: Keyword.get(tinfoil, :checksums, :sha256),
         ci: merge_ci(Keyword.get(tinfoil, :ci, []), project)
@@ -152,6 +155,48 @@ defmodule Tinfoil.Config do
       {:ok, []} -> {:error, :empty_targets}
       {:ok, _} -> {:error, :targets_not_a_list}
       :error -> {:error, :missing_targets}
+    end
+  end
+
+  defp fetch_archive_name(tinfoil) do
+    name = Keyword.get(tinfoil, :archive_name, "{app}-{version}-{target}")
+
+    cond do
+      not is_binary(name) ->
+        {:error, :archive_name_not_string}
+
+      not String.contains?(name, "{target}") ->
+        {:error, {:archive_name_missing_target_token, name}}
+
+      true ->
+        {:ok, name}
+    end
+  end
+
+  @valid_archive_formats [:tar_gz, :zip]
+
+  defp fetch_archive_format(tinfoil) do
+    format = Keyword.get(tinfoil, :archive_format, :tar_gz)
+
+    if format in @valid_archive_formats do
+      {:ok, format}
+    else
+      {:error, {:invalid_archive_format, format}}
+    end
+  end
+
+  defp fetch_homebrew(tinfoil, project) do
+    merged = merge_homebrew(Keyword.get(tinfoil, :homebrew, []), project)
+
+    cond do
+      not merged.enabled ->
+        {:ok, merged}
+
+      is_nil(merged.tap) or merged.tap == "" ->
+        {:error, :homebrew_enabled_without_tap}
+
+      true ->
+        {:ok, merged}
     end
   end
 
@@ -268,6 +313,27 @@ defmodule Tinfoil.Config do
     "unknown tinfoil targets: #{inspect(bad)}. " <>
       "Valid targets: #{inspect(Target.all())}"
   end
+
+  defp format_error(:archive_name_not_string),
+    do: ":tinfoil :archive_name must be a string template"
+
+  defp format_error({:archive_name_missing_target_token, name}),
+    do:
+      ":tinfoil :archive_name #{inspect(name)} is missing the `{target}` token. " <>
+        "Without it every target produces the same filename and archives collide."
+
+  defp format_error({:invalid_archive_format, format}),
+    do:
+      ":tinfoil :archive_format #{inspect(format)} is not supported. " <>
+        "Valid formats: #{inspect(@valid_archive_formats)}"
+
+  defp format_error(:homebrew_enabled_without_tap),
+    do:
+      ":tinfoil :homebrew is enabled but :tap is missing or empty. " <>
+        "Set `homebrew: [enabled: true, tap: \"owner/homebrew-tap\"]` or disable homebrew."
+
+  defp format_error(:release_opts_not_keyword_list),
+    do: "the selected release's options block is not a keyword list"
 
   defp format_error(:missing_releases),
     do:
