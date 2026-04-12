@@ -122,11 +122,11 @@ Burrito config. At load time, tinfoil reads your `releases/0` block
 and matches each tinfoil target to a Burrito target by `[os:, cpu:]`
 pair.
 
-For example, [woof](https://github.com/joshrotenberg/woof) declares:
+For example, suppose your app declares custom Burrito target names:
 
 ```elixir
 releases: [
-  woof: [
+  my_cli: [
     steps: [:assemble, &Burrito.wrap/1],
     burrito: [
       targets: [
@@ -142,8 +142,8 @@ releases: [
 When tinfoil builds `:darwin_arm64`, it finds the matching Burrito
 target (`macos_m1`), runs `mix release` with
 `BURRITO_TARGET=macos_m1`, reads the output at
-`burrito_out/woof_macos_m1`, and packages it as
-`woof-0.1.0-aarch64-apple-darwin.tar.gz`. If a tinfoil target has no
+`burrito_out/my_cli_macos_m1`, and packages it as
+`my_cli-0.1.0-aarch64-apple-darwin.tar.gz`. If a tinfoil target has no
 matching Burrito target, `Tinfoil.Config.load/1` returns an error at
 plan time naming the expected `[os:, cpu:]` pair.
 
@@ -154,15 +154,15 @@ target names:
 
 ```sh
 $ mix tinfoil.plan
-tinfoil plan for woof 0.1.0
+tinfoil plan for my_cli 0.1.0
 
   target         burrito   runner         archive
-  ─────────────  ────────  ─────────────  ───────────────────────────────────────────
-  darwin_arm64   macos_m1  macos-latest   woof-0.1.0-aarch64-apple-darwin.tar.gz
-  linux_x86_64   linux     ubuntu-latest  woof-0.1.0-x86_64-unknown-linux-musl.tar.gz
+  ─────────────  ────────  ─────────────  ───────────────────────────────────────────────
+  darwin_arm64   macos_m1  macos-latest   my_cli-0.1.0-aarch64-apple-darwin.tar.gz
+  linux_x86_64   linux     ubuntu-latest  my_cli-0.1.0-x86_64-unknown-linux-musl.tar.gz
 
   format:    tar_gz (sha256)
-  github:    joshrotenberg/woof (draft: false)
+  github:    owner/my_cli (draft: false)
   homebrew:  disabled
   installer: ~/.local/bin
 ```
