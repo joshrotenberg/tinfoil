@@ -3,6 +3,8 @@ defmodule Tinfoil.GeneratorTest do
 
   alias Tinfoil.{Config, Generator}
 
+  import Tinfoil.ProjectHelpers, only: [default_releases: 0]
+
   defp build_config(extra \\ []) do
     project =
       [
@@ -22,22 +24,6 @@ defmodule Tinfoil.GeneratorTest do
     {:ok, config} = Config.load(project)
     # Force a repo so generators don't call git.
     %{config | github: %{config.github | repo: "owner/my_cli"}}
-  end
-
-  defp default_releases do
-    [
-      my_cli: [
-        steps: [:assemble],
-        burrito: [
-          targets: [
-            darwin_arm64: [os: :darwin, cpu: :aarch64],
-            darwin_x86_64: [os: :darwin, cpu: :x86_64],
-            linux_x86_64: [os: :linux, cpu: :x86_64],
-            linux_arm64: [os: :linux, cpu: :aarch64]
-          ]
-        ]
-      ]
-    ]
   end
 
   describe "render/1" do
