@@ -236,8 +236,9 @@ tinfoil: [
 
   ci: [
     provider: :github_actions,
-    # elixir_version is auto-detected from the project's :elixir
-    # requirement if not explicitly set; these are the current fallbacks.
+    # All three are auto-detected if not set: elixir_version from the
+    # project's :elixir requirement, otp_version from System.otp_release(),
+    # zig_version from Burrito.get_versions(). These are the fallbacks.
     elixir_version: "1.19",
     otp_version: "28",
     zig_version: "0.15.2"

@@ -44,6 +44,7 @@ defmodule Tinfoil.ConfigTest do
       assert config.installer.enabled == false
       assert config.installer.install_dir == "~/.local/bin"
       assert config.ci.elixir_version == "1.19"
+      assert config.ci.otp_version == to_string(System.otp_release())
       assert config.ci.zig_version == "0.15.2"
     end
 
@@ -84,6 +85,31 @@ defmodule Tinfoil.ConfigTest do
       {:ok, config} = Config.load(project)
 
       assert config.ci.elixir_version == "1.16"
+    end
+
+    test "infers ci.otp_version from the running system" do
+      {:ok, config} =
+        Config.load(base_project(targets: [:darwin_arm64, :linux_x86_64]))
+
+      assert config.ci.otp_version == to_string(System.otp_release())
+    end
+
+    test "explicit ci.otp_version override beats auto-detection" do
+      {:ok, config} =
+        Config.load(
+          base_project(targets: [:darwin_arm64, :linux_x86_64], ci: [otp_version: "26"])
+        )
+
+      assert config.ci.otp_version == "26"
+    end
+
+    test "explicit ci.zig_version override beats auto-detection" do
+      {:ok, config} =
+        Config.load(
+          base_project(targets: [:darwin_arm64, :linux_x86_64], ci: [zig_version: "0.13.0"])
+        )
+
+      assert config.ci.zig_version == "0.13.0"
     end
 
     test "resolves burrito_names from the user's release config" do
@@ -190,6 +216,51 @@ defmodule Tinfoil.ConfigTest do
                    homebrew: [enabled: true, tap: ""]
                  )
                )
+    end
+
+    test "errors when :homebrew tap has invalid format" do
+      for bad_tap <- ["just-a-name", "owner/repo/extra", "has spaces/repo", ""] do
+        result =
+          Config.load(
+            base_project(
+              targets: [:darwin_arm64],
+              homebrew: [enabled: true, tap: bad_tap]
+            )
+          )
+
+        assert {:error, _} = result,
+               "expected #{inspect(bad_tap)} to be rejected"
+      end
+    end
+
+    test "errors when :homebrew formula_name is invalid" do
+      for bad_name <- ["Has Spaces", "UPPERCASE", "123start"] do
+        assert {:error, {:invalid_formula_name, ^bad_name}} =
+                 Config.load(
+                   base_project(
+                     targets: [:darwin_arm64],
+                     homebrew: [
+                       enabled: true,
+                       tap: "owner/homebrew-tap",
+                       formula_name: bad_name
+                     ]
+                   )
+                 )
+      end
+    end
+
+    test "accepts valid homebrew formula names" do
+      for name <- ["my-cli", "my_cli", "a123"] do
+        {:ok, config} =
+          Config.load(
+            base_project(
+              targets: [:darwin_arm64],
+              homebrew: [enabled: true, tap: "owner/homebrew-tap", formula_name: name]
+            )
+          )
+
+        assert config.homebrew.formula_name == name
+      end
     end
 
     test "accepts :homebrew enabled with a non-empty tap" do
