@@ -302,15 +302,14 @@ defmodule Tinfoil.Config do
     _ -> @fallback_zig_version
   end
 
-  # Read OTP major version from the running system. The value from
-  # System.otp_release/0 is a charlist like ~c"28", which maps directly
-  # to erlef/setup-beam's otp-version input.
+  # Read OTP major version from the running system. System.otp_release/0
+  # returns a string like "28", which maps directly to erlef/setup-beam's
+  # otp-version input.
   @fallback_otp_version "28"
 
   defp infer_otp_version do
     case System.otp_release() do
       rel when is_binary(rel) and rel != "" -> rel
-      rel when is_list(rel) and rel != [] -> List.to_string(rel)
       _ -> @fallback_otp_version
     end
   rescue
