@@ -77,7 +77,7 @@ defmodule Tinfoil.GeneratorTest do
       assert yaml =~ "x86_64-unknown-linux-musl"
       assert yaml =~ "aarch64-unknown-linux-musl"
       assert yaml =~ "macos-latest"
-      assert yaml =~ "macos-13"
+      assert yaml =~ "macos-15-intel"
       assert yaml =~ "ubuntu-latest"
       assert yaml =~ "ubuntu-24.04-arm"
     end

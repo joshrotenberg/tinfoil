@@ -39,7 +39,7 @@ defmodule Tinfoil.Target do
       os_family: :darwin
     },
     darwin_x86_64: %{
-      runner: "macos-13",
+      runner: "macos-15-intel",
       burrito_os: :darwin,
       burrito_cpu: :x86_64,
       triple: "x86_64-apple-darwin",
