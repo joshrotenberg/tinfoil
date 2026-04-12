@@ -195,10 +195,30 @@ defmodule Tinfoil.Config do
       is_nil(merged.tap) or merged.tap == "" ->
         {:error, :homebrew_enabled_without_tap}
 
+      not valid_tap_format?(merged.tap) ->
+        {:error, {:invalid_homebrew_tap, merged.tap}}
+
+      not valid_formula_name?(merged.formula_name) ->
+        {:error, {:invalid_formula_name, merged.formula_name}}
+
       true ->
         {:ok, merged}
     end
   end
+
+  # Tap must be "owner/repo" format (typically owner/homebrew-name).
+  defp valid_tap_format?(tap) when is_binary(tap) do
+    Regex.match?(~r|^[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+$|, tap)
+  end
+
+  defp valid_tap_format?(_), do: false
+
+  # Formula names must be valid Ruby identifiers (lowercase, underscores, hyphens).
+  defp valid_formula_name?(name) when is_binary(name) do
+    Regex.match?(~r/^[a-z][a-z0-9_-]*$/, name)
+  end
+
+  defp valid_formula_name?(_), do: false
 
   defp extract_license(project) do
     case get_in(project, [:package, :licenses]) do
@@ -240,8 +260,8 @@ defmodule Tinfoil.Config do
     defaults = %{
       provider: :github_actions,
       elixir_version: infer_elixir_version(project),
-      otp_version: "28",
-      zig_version: "0.15.2"
+      otp_version: infer_otp_version(),
+      zig_version: infer_zig_version()
     }
 
     Map.merge(defaults, Map.new(user))
@@ -263,6 +283,37 @@ defmodule Tinfoil.Config do
       _ ->
         @fallback_elixir_version
     end
+  end
+
+  # Try to read Burrito's required Zig version via Burrito.get_versions/0.
+  # Falls back to a hardcoded default when Burrito isn't loaded (e.g. in
+  # tinfoil's own test suite).
+  @fallback_zig_version "0.15.2"
+
+  defp infer_zig_version do
+    if Code.ensure_loaded?(Burrito) and function_exported?(Burrito, :get_versions, 0) do
+      # Burrito is not a dep of tinfoil; apply/3 avoids a compile-time warning.
+      # credo:disable-for-next-line Credo.Check.Refactor.Apply
+      apply(Burrito, :get_versions, []).zig |> Version.to_string()
+    else
+      @fallback_zig_version
+    end
+  rescue
+    _ -> @fallback_zig_version
+  end
+
+  # Read OTP major version from the running system. System.otp_release/0
+  # returns a string like "28", which maps directly to erlef/setup-beam's
+  # otp-version input.
+  @fallback_otp_version "28"
+
+  defp infer_otp_version do
+    case System.otp_release() do
+      rel when is_binary(rel) and rel != "" -> rel
+      _ -> @fallback_otp_version
+    end
+  rescue
+    _ -> @fallback_otp_version
   end
 
   @doc false
@@ -331,6 +382,16 @@ defmodule Tinfoil.Config do
     do:
       ":tinfoil :homebrew is enabled but :tap is missing or empty. " <>
         "Set `homebrew: [enabled: true, tap: \"owner/homebrew-tap\"]` or disable homebrew."
+
+  defp format_error({:invalid_homebrew_tap, tap}),
+    do:
+      ":tinfoil :homebrew :tap #{inspect(tap)} is not valid. " <>
+        "Expected \"owner/repo\" format (e.g. \"owner/homebrew-tap\")."
+
+  defp format_error({:invalid_formula_name, name}),
+    do:
+      ":tinfoil :homebrew :formula_name #{inspect(name)} is not a valid Homebrew formula name. " <>
+        "Use lowercase letters, digits, hyphens, and underscores (e.g. \"my-cli\")."
 
   defp format_error(:release_opts_not_keyword_list),
     do: "the selected release's options block is not a keyword list"
