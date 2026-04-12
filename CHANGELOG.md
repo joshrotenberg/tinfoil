@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.4](https://github.com/joshrotenberg/tinfoil/compare/v0.2.3...v0.2.4) (2026-04-12)
+
+
+### Features
+
+* auto-detect OTP/Zig versions, stricter Homebrew validation ([#37](https://github.com/joshrotenberg/tinfoil/issues/37)) ([69c7c9e](https://github.com/joshrotenberg/tinfoil/commit/69c7c9eaa76fb65201d36cd24f5c207eaf9f0844))
+* tag/version validation, test helpers, darwin runner fix ([#34](https://github.com/joshrotenberg/tinfoil/issues/34)) ([b9c2428](https://github.com/joshrotenberg/tinfoil/commit/b9c242887dd6d47616efd1a9f9027242bc3d4ab4)), closes [#15](https://github.com/joshrotenberg/tinfoil/issues/15)
+
 ## [0.2.3](https://github.com/joshrotenberg/tinfoil/compare/v0.2.2...v0.2.3) (2026-04-10)
 
 
