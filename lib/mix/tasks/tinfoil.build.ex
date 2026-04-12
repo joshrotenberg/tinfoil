@@ -20,6 +20,7 @@ defmodule Mix.Tasks.Tinfoil.Build do
     * `--skip-release` — skip `mix release` and package an existing
                          `burrito_out/<app>_<burrito_name>` binary
     * `--output-dir`   — directory for the archive (default `_tinfoil`)
+    * `--skip-version-check` — skip the git tag vs mix.exs version check
   """
 
   use Mix.Task
@@ -30,7 +31,12 @@ defmodule Mix.Tasks.Tinfoil.Build do
   def run(argv) do
     {opts, _, _} =
       OptionParser.parse(argv,
-        switches: [target: :string, skip_release: :boolean, output_dir: :string]
+        switches: [
+          target: :string,
+          skip_release: :boolean,
+          output_dir: :string,
+          skip_version_check: :boolean
+        ]
       )
 
     target = parse_target(opts[:target])
@@ -43,6 +49,13 @@ defmodule Mix.Tasks.Tinfoil.Build do
 
     if target not in config.targets do
       Mix.raise("target #{inspect(target)} not in :tinfoil :targets (#{inspect(config.targets)})")
+    end
+
+    unless opts[:skip_version_check] do
+      case Build.validate_tag_version(config.version) do
+        :ok -> :ok
+        {:error, msg} -> Mix.raise(msg <> " Pass --skip-version-check to bypass.")
+      end
     end
 
     warn_if_not_prod()
