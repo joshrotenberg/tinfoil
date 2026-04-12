@@ -3,6 +3,8 @@ defmodule Tinfoil.PlanTest do
 
   alias Tinfoil.{Config, Plan}
 
+  import Tinfoil.ProjectHelpers, only: [default_releases: 0]
+
   defp build_config(extra \\ []) do
     project =
       [
@@ -22,24 +24,6 @@ defmodule Tinfoil.PlanTest do
     # Pin the inferred github repo so tests are deterministic regardless
     # of the environment's git remote.
     %{config | github: %{config.github | repo: "owner/my_cli"}}
-  end
-
-  # Burrito targets using tinfoil's own atom names, so burrito_name
-  # matches the tinfoil target atom in default-case assertions.
-  defp default_releases do
-    [
-      my_cli: [
-        steps: [:assemble],
-        burrito: [
-          targets: [
-            darwin_arm64: [os: :darwin, cpu: :aarch64],
-            darwin_x86_64: [os: :darwin, cpu: :x86_64],
-            linux_x86_64: [os: :linux, cpu: :x86_64],
-            linux_arm64: [os: :linux, cpu: :aarch64]
-          ]
-        ]
-      ]
-    ]
   end
 
   describe "build/1" do

@@ -3,37 +3,7 @@ defmodule Tinfoil.ConfigTest do
 
   alias Tinfoil.Config
 
-  defp base_project(tinfoil_opts, opts \\ []) do
-    releases = Keyword.get(opts, :releases, default_releases())
-
-    [
-      app: :my_cli,
-      version: "1.2.3",
-      description: "A test CLI",
-      homepage_url: "https://example.com/my_cli",
-      package: [licenses: ["Apache-2.0"]],
-      releases: releases,
-      tinfoil: tinfoil_opts
-    ]
-  end
-
-  # Burrito targets using tinfoil's own atom names — keeps default-case
-  # assertions trivial (burrito_name == tinfoil target atom).
-  defp default_releases do
-    [
-      my_cli: [
-        steps: [:assemble],
-        burrito: [
-          targets: [
-            darwin_arm64: [os: :darwin, cpu: :aarch64],
-            darwin_x86_64: [os: :darwin, cpu: :x86_64],
-            linux_x86_64: [os: :linux, cpu: :x86_64],
-            linux_arm64: [os: :linux, cpu: :aarch64]
-          ]
-        ]
-      ]
-    ]
-  end
+  import Tinfoil.ProjectHelpers
 
   describe "load/1" do
     test "returns an error when no :tinfoil key is present" do

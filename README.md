@@ -185,19 +185,18 @@ build:
 | Target          | Triple                          | GitHub runner       |
 | --------------- | ------------------------------- | ------------------- |
 | `:darwin_arm64` | `aarch64-apple-darwin`          | `macos-latest`      |
-| `:darwin_x86_64`| `x86_64-apple-darwin`           | `macos-13` ⚠        |
+| `:darwin_x86_64`| `x86_64-apple-darwin`           | `macos-15-intel`    |
 | `:linux_x86_64` | `x86_64-unknown-linux-musl`     | `ubuntu-latest`     |
 | `:linux_arm64`  | `aarch64-unknown-linux-musl`    | `ubuntu-24.04-arm`  |
 
 Triples follow the standard Rust-style convention since that is what
 users expect to see in release asset names.
 
-> ⚠ **`:darwin_x86_64` availability is unreliable.** GitHub has been
-> retiring the `macos-13` Intel runner label. On many accounts the
-> job gets queued and then cancelled with no steps executed. The
-> current recommendation is to omit `:darwin_x86_64` from your
-> `:targets` list until tinfoil lands a cross-compile-from-ARM
-> strategy. Tracking this in the roadmap as a priority item.
+> **`:darwin_x86_64` uses `macos-15-intel`**, GitHub's last Intel
+> runner label, available until August 2027. After that date, native
+> x86_64 macOS runners will no longer exist on GitHub Actions. By then
+> the Intel Mac install base will be small enough that dropping the
+> target is likely the right call.
 
 Windows support is deferred until Burrito's Windows story stabilizes.
 

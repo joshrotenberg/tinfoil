@@ -82,6 +82,31 @@ defmodule Tinfoil.Build do
     }
   end
 
+  @doc """
+  Check that the `GITHUB_REF_NAME` tag (if set) matches the given version.
+
+  Returns `:ok` when the env var is unset or the versions match.
+  Returns `{:error, message}` on mismatch.
+  """
+  @spec validate_tag_version(String.t()) :: :ok | {:error, String.t()}
+  def validate_tag_version(mix_version) do
+    case System.get_env("GITHUB_REF_NAME") do
+      nil ->
+        :ok
+
+      tag ->
+        tag_version = String.trim_leading(tag, "v")
+
+        if tag_version == mix_version do
+          :ok
+        else
+          {:error,
+           "tag #{tag} does not match mix.exs version #{mix_version}. " <>
+             "Bump the version in mix.exs or re-tag."}
+        end
+    end
+  end
+
   ## ───────────────────── internals ─────────────────────
 
   defp run_release(burrito_name) do
