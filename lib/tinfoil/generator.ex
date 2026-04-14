@@ -13,11 +13,50 @@ defmodule Tinfoil.Generator do
 
   alias Tinfoil.Config
 
-  # Templates live in priv/ so they ship with the OTP app regardless of
-  # distribution shape (hex tarball, local archive install, etc.). Using
-  # `__DIR__` would bake in the path of the source tree at compile time,
-  # which vanishes after a `mix archive.install`.
-  defp templates_dir, do: :code.priv_dir(:tinfoil) |> List.to_string() |> Path.join("templates")
+  # Templates are compiled into this module at build time via
+  # `EEx.function_from_file/5` — that's the only distribution shape
+  # that's bulletproof across hex deps, path deps, Burrito wraps, AND
+  # local mix archives (archives only bundle ebin/, so neither a
+  # source `lib/` path nor `priv/` would be available at runtime).
+  #
+  # We recompile this module when any template changes so edits during
+  # development don't require a manual `touch`.
+  @templates_dir Path.expand("../../priv/templates", __DIR__)
+  @external_resource Path.join(@templates_dir, "release.yml.eex")
+  @external_resource Path.join(@templates_dir, "formula.rb.eex")
+  @external_resource Path.join(@templates_dir, "install.sh.eex")
+  @external_resource Path.join(@templates_dir, "application.ex.eex")
+  @external_resource Path.join(@templates_dir, "cli.ex.eex")
+
+  require EEx
+
+  EEx.function_from_file(
+    :defp,
+    :render_release_yml,
+    Path.join(@templates_dir, "release.yml.eex"),
+    [
+      :assigns
+    ]
+  )
+
+  EEx.function_from_file(:defp, :render_formula_rb, Path.join(@templates_dir, "formula.rb.eex"), [
+    :assigns
+  ])
+
+  EEx.function_from_file(:defp, :render_install_sh, Path.join(@templates_dir, "install.sh.eex"), [
+    :assigns
+  ])
+
+  EEx.function_from_file(
+    :defp,
+    :render_application_ex,
+    Path.join(@templates_dir, "application.ex.eex"),
+    [:assigns]
+  )
+
+  EEx.function_from_file(:defp, :render_cli_ex, Path.join(@templates_dir, "cli.ex.eex"), [
+    :assigns
+  ])
 
   @type generated :: %{path: Path.t(), contents: String.t(), executable: boolean()}
 
@@ -120,7 +159,7 @@ defmodule Tinfoil.Generator do
       homebrew: config.homebrew
     ]
 
-    eval("release.yml.eex", assigns)
+    render_release_yml(assigns)
   end
 
   @doc false
@@ -140,7 +179,7 @@ defmodule Tinfoil.Generator do
       targets: config.targets
     ]
 
-    eval("formula.rb.eex", assigns)
+    render_formula_rb(assigns)
   end
 
   @doc false
@@ -156,7 +195,7 @@ defmodule Tinfoil.Generator do
       raw_url: "https://raw.githubusercontent.com/#{repo}/main/scripts/install.sh"
     ]
 
-    eval("install.sh.eex", assigns)
+    render_install_sh(assigns)
   end
 
   @doc """
@@ -172,7 +211,7 @@ defmodule Tinfoil.Generator do
       app_module: app_module(app)
     ]
 
-    eval("application.ex.eex", assigns)
+    render_application_ex(assigns)
   end
 
   @doc """
@@ -187,7 +226,7 @@ defmodule Tinfoil.Generator do
       app_module: app_module(app)
     ]
 
-    eval("cli.ex.eex", assigns)
+    render_cli_ex(assigns)
   end
 
   @doc """
@@ -201,11 +240,6 @@ defmodule Tinfoil.Generator do
   end
 
   ## ───────────── internals ─────────────
-
-  defp eval(name, assigns) do
-    path = Path.join(templates_dir(), name)
-    EEx.eval_file(path, assigns: assigns)
-  end
 
   defp tinfoil_version do
     case Application.spec(:tinfoil, :vsn) do
