@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.7](https://github.com/joshrotenberg/tinfoil/compare/v0.2.6...v0.2.7) (2026-04-14)
+
+
+### Features
+
+* free-tier linux_arm64 default + single_runner_per_os collapse ([#46](https://github.com/joshrotenberg/tinfoil/issues/46)) ([47c540f](https://github.com/joshrotenberg/tinfoil/commit/47c540fe44fc3ff11e5d142675d709324cd4e3c1))
+
 ## [0.2.6](https://github.com/joshrotenberg/tinfoil/compare/v0.2.5...v0.2.6) (2026-04-14)
 
 
