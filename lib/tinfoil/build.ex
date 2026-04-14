@@ -72,7 +72,18 @@ defmodule Tinfoil.Build do
     info(["* packaging ", binary])
     archive_basename = Config.archive_basename(config, target)
     archive_ext = Config.archive_extension(config, target)
-    archive = package(archive_ext, binary, config.app, binary_ext, archive_basename, output_dir)
+
+    archive =
+      package(
+        archive_ext,
+        binary,
+        config.app,
+        binary_ext,
+        archive_basename,
+        output_dir,
+        config.extra_artifacts
+      )
+
     {sha, sidecar} = Archive.sha256(archive)
 
     %{
@@ -119,13 +130,14 @@ defmodule Tinfoil.Build do
 
   # Pick the packer based on the archive extension resolved for this target.
   # The binary's own extension (.exe on Windows) is preserved inside the
-  # archive so `unzip` produces a runnable file.
-  defp package(".zip", binary, app, binary_ext, basename, output_dir) do
-    Archive.zip(binary, "#{app}#{binary_ext}", basename, output_dir)
+  # archive so `unzip` produces a runnable file. Extra files configured
+  # via :extra_artifacts are bundled alongside the main binary.
+  defp package(".zip", binary, app, binary_ext, basename, output_dir, extras) do
+    Archive.zip(binary, "#{app}#{binary_ext}", basename, output_dir, extras)
   end
 
-  defp package(".tar.gz", binary, app, _binary_ext, basename, output_dir) do
-    Archive.tar_gz(binary, app, basename, output_dir)
+  defp package(".tar.gz", binary, app, _binary_ext, basename, output_dir, extras) do
+    Archive.tar_gz(binary, app, basename, output_dir, extras)
   end
 
   defp run_release(burrito_name) do

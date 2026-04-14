@@ -27,6 +27,10 @@ One `git tag v1.0.0 && git push --tags` produces:
   (via Linuxbrew, no extra config) — tinfoil renders `Formula/yourcli.rb`
   with real URLs + SHAs and commits it, under either a PAT or an
   SSH deploy key.
+- **Optional extras bundled with every binary.** `extra_artifacts:`
+  config ships your LICENSE, man pages, shell completions, or
+  whatever else alongside the binary at configurable destinations
+  inside each archive.
 - **A regeneratable workflow.** `mix tinfoil.generate` rewrites
   `.github/workflows/release.yml` from your `mix.exs` config, so
   upgrading tinfoil upgrades the pipeline.
@@ -415,6 +419,14 @@ tinfoil: [
   # `id-token: write` and `attestations: write` permissions from the
   # generated workflow).
   attestations: true,
+
+  # Extra files to bundle alongside the binary in every archive. Bare
+  # strings use the same relative path inside the archive; a source/dest
+  # map places the file at a custom location.
+  extra_artifacts: [
+    "LICENSE",
+    %{source: "man/myapp.1", dest: "share/man/man1/myapp.1"}
+  ],
 
 
   ci: [

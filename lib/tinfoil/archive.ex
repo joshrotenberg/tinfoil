@@ -25,8 +25,8 @@ defmodule Tinfoil.Archive do
 
   Returns the path to the written archive.
   """
-  @spec tar_gz(Path.t(), atom(), String.t(), Path.t()) :: Path.t()
-  def tar_gz(binary_path, app, archive_basename, output_dir) do
+  @spec tar_gz(Path.t(), atom(), String.t(), Path.t(), [{Path.t(), Path.t()}]) :: Path.t()
+  def tar_gz(binary_path, app, archive_basename, output_dir, extras \\ []) do
     File.mkdir_p!(output_dir)
     archive_path = Path.join(output_dir, archive_basename <> ".tar.gz")
     name_in_archive = to_string(app)
@@ -52,6 +52,18 @@ defmodule Tinfoil.Archive do
           []
         )
 
+      Enum.each(extras, fn {src, dst} ->
+        verify_extra_exists!(src)
+
+        :ok =
+          :erl_tar.add(
+            tar,
+            String.to_charlist(src),
+            String.to_charlist(dst),
+            []
+          )
+      end)
+
       :ok = :erl_tar.close(tar)
     after
       File.rm(stage)
@@ -71,18 +83,29 @@ defmodule Tinfoil.Archive do
 
   Returns the path to the written archive.
   """
-  @spec zip(Path.t(), String.t(), String.t(), Path.t()) :: Path.t()
-  def zip(binary_path, name_in_archive, archive_basename, output_dir) do
+  @spec zip(Path.t(), String.t(), String.t(), Path.t(), [{Path.t(), Path.t()}]) :: Path.t()
+  def zip(binary_path, name_in_archive, archive_basename, output_dir, extras \\ []) do
     File.mkdir_p!(output_dir)
     archive_path = Path.join(output_dir, archive_basename <> ".zip")
 
-    {:ok, _} =
-      :zip.create(
-        String.to_charlist(archive_path),
-        [{String.to_charlist(name_in_archive), File.read!(binary_path)}]
-      )
+    extra_entries =
+      Enum.map(extras, fn {src, dst} ->
+        verify_extra_exists!(src)
+        {String.to_charlist(dst), File.read!(src)}
+      end)
+
+    entries =
+      [{String.to_charlist(name_in_archive), File.read!(binary_path)} | extra_entries]
+
+    {:ok, _} = :zip.create(String.to_charlist(archive_path), entries)
 
     archive_path
+  end
+
+  defp verify_extra_exists!(path) do
+    unless File.regular?(path) do
+      raise "extra_artifacts entry not found on disk: #{inspect(path)}"
+    end
   end
 
   @doc """

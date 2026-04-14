@@ -39,6 +39,7 @@ defmodule Tinfoil.Config do
     checksums: :sha256,
     prerelease_pattern: nil,
     extra_targets: %{},
+    extra_artifacts: [],
     single_runner_per_os: false,
     attestations: true,
     ci: %{
@@ -65,6 +66,7 @@ defmodule Tinfoil.Config do
           checksums: :sha256,
           prerelease_pattern: Regex.t(),
           extra_targets: Target.extras(),
+          extra_artifacts: [{Path.t(), Path.t()}],
           single_runner_per_os: boolean(),
           attestations: boolean(),
           ci: map()
@@ -83,6 +85,8 @@ defmodule Tinfoil.Config do
     with {:ok, tinfoil} <- fetch_tinfoil(project),
          {:ok, extra_targets} <-
            Target.validate_extras(Keyword.get(tinfoil, :extra_targets, %{})),
+         {:ok, extra_artifacts} <-
+           normalize_extra_artifacts(Keyword.get(tinfoil, :extra_artifacts, [])),
          {:ok, targets} <- fetch_targets(tinfoil),
          :ok <- Target.validate(targets, extra_targets),
          {:ok, archive_name} <- fetch_archive_name(tinfoil),
@@ -107,6 +111,7 @@ defmodule Tinfoil.Config do
         checksums: Keyword.get(tinfoil, :checksums, :sha256),
         prerelease_pattern: prerelease_pattern,
         extra_targets: extra_targets,
+        extra_artifacts: extra_artifacts,
         single_runner_per_os: Keyword.get(tinfoil, :single_runner_per_os, false),
         attestations: Keyword.get(tinfoil, :attestations, true),
         ci: merge_ci(Keyword.get(tinfoil, :ci, []), project)
@@ -213,6 +218,38 @@ defmodule Tinfoil.Config do
       {:error, {:invalid_archive_format, format}}
     end
   end
+
+  # Accept either bare path strings (bundled at the same relative
+  # location inside the tarball) or `%{source: ..., dest: ...}` maps
+  # (explicit destination). Normalize everything into a list of
+  # `{source, dest}` tuples so downstream code only sees one shape.
+  defp normalize_extra_artifacts(nil), do: {:ok, []}
+  defp normalize_extra_artifacts([]), do: {:ok, []}
+
+  defp normalize_extra_artifacts(list) when is_list(list) do
+    Enum.reduce_while(list, {:ok, []}, fn entry, {:ok, acc} ->
+      case normalize_extra_artifact_entry(entry) do
+        {:ok, tuple} -> {:cont, {:ok, [tuple | acc]}}
+        {:error, _} = err -> {:halt, err}
+      end
+    end)
+    |> case do
+      {:ok, reversed} -> {:ok, Enum.reverse(reversed)}
+      err -> err
+    end
+  end
+
+  defp normalize_extra_artifacts(other),
+    do: {:error, {:invalid_extra_artifacts, other}}
+
+  defp normalize_extra_artifact_entry(path) when is_binary(path), do: {:ok, {path, path}}
+
+  defp normalize_extra_artifact_entry(%{source: src, dest: dst})
+       when is_binary(src) and is_binary(dst),
+       do: {:ok, {src, dst}}
+
+  defp normalize_extra_artifact_entry(other),
+    do: {:error, {:invalid_extra_artifact, other}}
 
   @default_prerelease_pattern ~r/-(rc|beta|alpha)(\.|$)/
 
@@ -550,6 +587,16 @@ defmodule Tinfoil.Config do
   defp format_error({:invalid_prerelease_pattern, value}),
     do:
       ":tinfoil :prerelease_pattern must be a Regex (e.g. ~r/-(rc|beta)/), got: #{inspect(value)}"
+
+  defp format_error({:invalid_extra_artifacts, v}),
+    do:
+      ":tinfoil :extra_artifacts must be a list of path strings or " <>
+        "%{source: ..., dest: ...} maps. Got: #{inspect(v)}"
+
+  defp format_error({:invalid_extra_artifact, v}),
+    do:
+      "invalid :extra_artifacts entry: #{inspect(v)}. Each entry must be " <>
+        "a path string or `%{source: \"...\", dest: \"...\"}`."
 
   defp format_error(other), do: "invalid tinfoil config: #{inspect(other)}"
 
