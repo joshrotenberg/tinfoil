@@ -189,6 +189,7 @@ push it to the configured tap.
 | `mix tinfoil.build`      | Build a single target: run `mix release` with the right `BURRITO_TARGET`, package the binary into a tar.gz, and write a sha256 sidecar. Called by the generated workflow once per matrix entry. |
 | `mix tinfoil.publish`    | Create a GitHub Release from artifacts in `artifacts/` and upload every archive plus a combined `checksums-sha256.txt`. Tags containing `-rc`, `-beta`, or `-alpha` are marked as prereleases. Pass `--replace` to delete and recreate if a release for the tag already exists. |
 | `mix tinfoil.homebrew`   | Render the Homebrew formula from `artifacts/` and push it to the configured tap. Honors `homebrew.auth` for choosing between a PAT (`HOMEBREW_TAP_TOKEN`) and an SSH deploy key. |
+| `mix tinfoil.scoop`      | Render the Scoop manifest from `artifacts/` and push it to the configured bucket. Honors `scoop.auth` for choosing between a PAT (`SCOOP_BUCKET_TOKEN`) and an SSH deploy key. Requires `:windows_x86_64` in `:targets`. |
 
 The generated workflow invokes `mix tinfoil.build` and
 `mix tinfoil.publish` directly, so tinfoil version bumps usually take
@@ -378,6 +379,40 @@ so Scoop bucket maintainers (or automated bots) can pick up new
 versions without tinfoil re-pushing. If you don't want that, edit
 the manifest in the bucket after push.
 
+If your bucket-auth secret is named differently, override the name
+with `scoop: [token_secret: "YOUR_NAME"]` or
+`scoop: [deploy_key_secret: "YOUR_NAME"]` — same pattern as the
+Homebrew section above. The env var the mix task reads is fixed;
+only the secret reference in the workflow is configurable.
+
+### Release channels and prerelease handling
+
+`prerelease_pattern` controls two things:
+
+- **GitHub Release creation** (`mix tinfoil.publish`) — the release
+  is marked as a prerelease when the tag matches the pattern
+- **Homebrew / Scoop push-skip** — the generated workflow jobs skip
+  the publish step when the tag looks like a prerelease, so tagged
+  prereleases don't overwrite the stable formula/manifest
+
+The workflow's skip condition is hardcoded to match the default
+pattern (`-rc`, `-beta`, `-alpha`). If you override
+`prerelease_pattern` to use different tokens (`-dev`, `-nightly`,
+`-snapshot`, ...), `mix tinfoil.publish` will respect your pattern
+for the release flag, but the Homebrew and Scoop jobs will still
+only skip the default tokens. Workarounds:
+
+- Keep a superset pattern in `prerelease_pattern` that always
+  includes the default tokens, OR
+- Add a `homebrew: [enabled: false]` / `scoop: [enabled: false]`
+  environment-gated override (the release still gets published;
+  the package managers just won't auto-update), OR
+- Hand-edit `.github/workflows/release.yml` after
+  `mix tinfoil.generate` to extend the `if:` expression
+
+Unifying this into a single configurable skip list is tracked; open
+a PR if you need it before we get there.
+
 ### Runtime output from the wrapped binary
 
 A Burrito-wrapped binary prints a handful of diagnostic lines to
@@ -419,6 +454,20 @@ tinfoil: [
   # Required. Targets to build.
   targets: [:darwin_arm64, :linux_x86_64],
 
+  # Optional: user-defined targets merged on top of the built-in matrix.
+  # Each entry needs the full spec shape.
+  extra_targets: %{},
+
+  # Optional: collapse every target in an OS family onto one CI runner
+  # that builds them sequentially. Defaults to false — one job per target.
+  single_runner_per_os: false,
+
+  # Regex matched against the git tag to auto-mark a release as
+  # prerelease. Default covers -rc / -beta / -alpha; override if you use
+  # different conventions. See the caveat about Homebrew / Scoop skip
+  # logic in the Release channels section below.
+  prerelease_pattern: ~r/-(rc|beta|alpha)(\.|$)/,
+
   # Archive naming template. Interpolations: {app}, {version}, {target}.
   archive_name: "{app}-{version}-{target}",
   archive_format: :tar_gz,
@@ -435,8 +484,10 @@ tinfoil: [
   homebrew: [
     enabled: true,
     tap: "owner/homebrew-tap",
-    formula_name: "my_cli", # defaults to the app name
-    auth: :token            # or :deploy_key (default :token)
+    formula_name: "my_cli",                          # defaults to the app name
+    auth: :token,                                    # or :deploy_key (default :token)
+    token_secret: "HOMEBREW_TAP_TOKEN",              # GitHub secret name for the PAT
+    deploy_key_secret: "HOMEBREW_TAP_DEPLOY_KEY"     # GitHub secret name for the SSH key
   ],
 
   # Scoop manifest generation (Windows). Same auth model as Homebrew.
@@ -444,8 +495,10 @@ tinfoil: [
   scoop: [
     enabled: true,
     bucket: "owner/scoop-bucket",
-    manifest_name: "my_cli", # defaults to the app name
-    auth: :token             # or :deploy_key (default :token)
+    manifest_name: "my_cli",                        # defaults to the app name
+    auth: :token,                                   # or :deploy_key (default :token)
+    token_secret: "SCOOP_BUCKET_TOKEN",             # GitHub secret name for the PAT
+    deploy_key_secret: "SCOOP_BUCKET_DEPLOY_KEY"    # GitHub secret name for the SSH key
   ],
 
   # Shell installer script.
