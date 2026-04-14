@@ -110,12 +110,12 @@ defmodule Tinfoil.Generator do
 
   @doc false
   def render_workflow(%Config{} = config) do
+    plan = Tinfoil.Plan.build(config)
+
     assigns = [
       tinfoil_version: tinfoil_version(),
       app: config.app,
-      targets: config.targets,
-      extra_targets: config.extra_targets,
-      burrito_names: config.burrito_names,
+      build_entries: Tinfoil.Plan.build_entries(plan),
       ci: config.ci,
       github: config.github,
       homebrew: config.homebrew

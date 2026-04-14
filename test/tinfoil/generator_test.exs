@@ -72,14 +72,15 @@ defmodule Tinfoil.GeneratorTest do
     test "workflow includes every configured target" do
       yaml = build_config() |> Generator.render_workflow()
 
-      assert yaml =~ "aarch64-apple-darwin"
-      assert yaml =~ "x86_64-apple-darwin"
-      assert yaml =~ "x86_64-unknown-linux-musl"
-      assert yaml =~ "aarch64-unknown-linux-musl"
+      # Triples no longer appear in the matrix — that lookup happens inside
+      # `mix tinfoil.build`. The matrix just carries target atoms + runners.
+      assert yaml =~ "id: darwin_arm64"
+      assert yaml =~ "id: darwin_x86_64"
+      assert yaml =~ "id: linux_x86_64"
+      assert yaml =~ "id: linux_arm64"
       assert yaml =~ "macos-latest"
       assert yaml =~ "macos-15-intel"
       assert yaml =~ "ubuntu-latest"
-      assert yaml =~ "ubuntu-24.04-arm"
     end
 
     test "workflow respects configured tool versions" do
@@ -111,7 +112,9 @@ defmodule Tinfoil.GeneratorTest do
     test "workflow delegates build to mix tinfoil.build" do
       yaml = build_config() |> Generator.render_workflow()
 
-      assert yaml =~ "mix tinfoil.build --target ${{ matrix.target }}"
+      assert yaml =~ ~S(mix tinfoil.build --target "$target")
+      assert yaml =~ "for target in"
+      assert yaml =~ ~S(tr ',' ' ')
       refute yaml =~ "BURRITO_TARGET"
       refute yaml =~ "burrito_out/"
     end
@@ -129,7 +132,7 @@ defmodule Tinfoil.GeneratorTest do
 
       assert yaml =~ "actions/cache@v5"
       # Build cache key includes the matrix target so each runner has its own
-      assert yaml =~ ~s(key: ${{ runner.os }}-${{ matrix.target }}-mix-)
+      assert yaml =~ ~s(key: ${{ runner.os }}-${{ matrix.id }}-mix-)
     end
 
     test "release job caches deps separately from build" do
@@ -171,8 +174,11 @@ defmodule Tinfoil.GeneratorTest do
       config = %{config | github: %{config.github | repo: "owner/my_cli"}}
       yaml = Generator.render_workflow(config)
 
-      assert yaml =~ "burrito_name: macos_m1"
-      assert yaml =~ "burrito_name: linux"
+      # burrito_name lookup happens inside `mix tinfoil.build` at runtime;
+      # the matrix just passes the tinfoil target atom. End-to-end coverage
+      # lives in Tinfoil.BuildTest.
+      assert yaml =~ ~s(targets: "darwin_arm64")
+      assert yaml =~ ~s(targets: "linux_x86_64")
     end
   end
 

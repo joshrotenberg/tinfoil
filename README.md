@@ -187,7 +187,7 @@ build:
 | `:darwin_arm64`    | `aarch64-apple-darwin`          | `macos-latest`      | `.tar.gz`|
 | `:darwin_x86_64`   | `x86_64-apple-darwin`           | `macos-15-intel`    | `.tar.gz`|
 | `:linux_x86_64`    | `x86_64-unknown-linux-musl`     | `ubuntu-latest`     | `.tar.gz`|
-| `:linux_arm64`     | `aarch64-unknown-linux-musl`    | `ubuntu-24.04-arm`  | `.tar.gz`|
+| `:linux_arm64`     | `aarch64-unknown-linux-musl`    | `ubuntu-latest`     | `.tar.gz`|
 | `:windows_x86_64`  | `x86_64-pc-windows-msvc`        | `ubuntu-latest`     | `.zip`   |
 
 Triples follow the standard Rust-style convention since that is what
@@ -199,10 +199,36 @@ users expect to see in release asset names.
 > the Intel Mac install base will be small enough that dropping the
 > target is likely the right call.
 
-Windows builds cross-compile from `ubuntu-latest` via Zig (the same
-runner used for Linux); a native `windows-latest` runner is not
-needed. The generated installer script targets Unix shells only --
-shipping a PowerShell installer for Windows users is future work.
+Windows and `linux_arm64` builds cross-compile from `ubuntu-latest`
+via Zig; no native `windows-latest` or `ubuntu-24.04-arm` runner is
+required. The cross-compiled `linux_arm64` default matters because
+GitHub's ARM runner is only on paid plans -- free-tier users were
+previously stuck on a queued job forever. Paid users who want a
+native arm64 build can flip the runner back via `:extra_targets`.
+
+The generated installer script targets Unix shells only; a PowerShell
+installer for Windows users is future work.
+
+### Collapsing the build matrix
+
+By default every target is its own CI job. Set
+`single_runner_per_os: true` in your `:tinfoil` config to collapse
+each OS family onto one job that builds every target in that family
+sequentially:
+
+```elixir
+tinfoil: [
+  targets: [:darwin_arm64, :darwin_x86_64, :linux_x86_64, :linux_arm64],
+  single_runner_per_os: true
+]
+```
+
+The runner used for each family is taken from the first target in
+that family, so list the one you want to own the family first
+(`:darwin_arm64` before `:darwin_x86_64` puts both on `macos-latest`
+and cross-compiles the x86 slice via Zig). This trades wall-clock
+parallelism for fewer runner-minutes; leave it off if your builds
+don't contend for runners.
 
 ### NIFs and cross-compilation
 
