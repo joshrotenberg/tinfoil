@@ -111,9 +111,7 @@ defmodule Tinfoil.GeneratorTest do
 
     test "workflow uses deploy key auth when configured" do
       yaml =
-        build_config(
-          homebrew: [enabled: true, tap: "owner/homebrew-tap", auth: :deploy_key]
-        )
+        build_config(homebrew: [enabled: true, tap: "owner/homebrew-tap", auth: :deploy_key])
         |> Generator.render_workflow()
 
       assert yaml =~ "webfactory/ssh-agent"
