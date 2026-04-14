@@ -25,6 +25,7 @@ defmodule Tinfoil.Generator do
   @external_resource Path.join(@templates_dir, "release.yml.eex")
   @external_resource Path.join(@templates_dir, "formula.rb.eex")
   @external_resource Path.join(@templates_dir, "install.sh.eex")
+  @external_resource Path.join(@templates_dir, "install.ps1.eex")
   @external_resource Path.join(@templates_dir, "application.ex.eex")
   @external_resource Path.join(@templates_dir, "cli.ex.eex")
 
@@ -46,6 +47,15 @@ defmodule Tinfoil.Generator do
   EEx.function_from_file(:defp, :render_install_sh, Path.join(@templates_dir, "install.sh.eex"), [
     :assigns
   ])
+
+  EEx.function_from_file(
+    :defp,
+    :render_install_ps1,
+    Path.join(@templates_dir, "install.ps1.eex"),
+    [
+      :assigns
+    ]
+  )
 
   EEx.function_from_file(
     :defp,
@@ -96,6 +106,13 @@ defmodule Tinfoil.Generator do
               path: "scripts/install.sh",
               contents: render_installer(config),
               executable: true
+            },
+            %{
+              path: "scripts/install.ps1",
+              contents: render_installer_powershell(config),
+              # .ps1 doesn't need a Unix executable bit; PowerShell's
+              # own execution policy gates whether it runs.
+              executable: false
             }
           ]
       else
@@ -196,6 +213,22 @@ defmodule Tinfoil.Generator do
     ]
 
     render_install_sh(assigns)
+  end
+
+  @doc false
+  @spec render_installer_powershell(Config.t()) :: String.t()
+  def render_installer_powershell(%Config{} = config) do
+    repo = config.github.repo || "OWNER/REPO"
+
+    assigns = [
+      tinfoil_version: tinfoil_version(),
+      app: config.app,
+      repo: repo,
+      install_dir: config.installer.install_dir,
+      raw_ps_url: "https://raw.githubusercontent.com/#{repo}/main/scripts/install.ps1"
+    ]
+
+    render_install_ps1(assigns)
   end
 
   @doc """

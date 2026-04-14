@@ -44,14 +44,15 @@ defmodule Tinfoil.GeneratorTest do
       refute "scripts/update-homebrew.sh" in paths
     end
 
-    test "emits the installer script when installer is enabled" do
+    test "emits both installer scripts when installer is enabled" do
       config = build_config(installer: [enabled: true])
       paths = config |> Generator.render() |> Enum.map(& &1.path)
 
       assert "scripts/install.sh" in paths
+      assert "scripts/install.ps1" in paths
     end
 
-    test "shell scripts are marked executable" do
+    test "install.sh is executable; install.ps1 is not" do
       config =
         build_config(
           installer: [enabled: true],
@@ -59,10 +60,12 @@ defmodule Tinfoil.GeneratorTest do
         )
 
       files = Generator.render(config)
-      install = Enum.find(files, &(&1.path == "scripts/install.sh"))
+      sh = Enum.find(files, &(&1.path == "scripts/install.sh"))
+      ps1 = Enum.find(files, &(&1.path == "scripts/install.ps1"))
       workflow = Enum.find(files, &(&1.path == ".github/workflows/release.yml"))
 
-      assert install.executable
+      assert sh.executable
+      refute ps1.executable
       refute workflow.executable
     end
   end
@@ -314,6 +317,22 @@ defmodule Tinfoil.GeneratorTest do
       assert sh =~ "checksums-sha256.txt"
       refute sh =~ ".tar.gz.sha256"
     end
+
+    test "renders install.ps1 referencing the configured repo + windows target" do
+      ps1 =
+        build_config(installer: [enabled: true])
+        |> Generator.render_installer_powershell()
+
+      assert ps1 =~ ~s($App = "my_cli")
+      assert ps1 =~ ~s($Repo = "owner/my_cli")
+      assert ps1 =~ "x86_64-pc-windows-msvc"
+      # The .zip URL path, not .tar.gz — Windows releases are zipped.
+      assert ps1 =~ ~s($Triple.zip")
+      # Checksum verification path matches the sh script's choice.
+      assert ps1 =~ "checksums-sha256.txt"
+      # Default install dir resolution should reference LOCALAPPDATA.
+      assert ps1 =~ "LOCALAPPDATA"
+    end
   end
 
   describe "write!/2" do
@@ -329,6 +348,7 @@ defmodule Tinfoil.GeneratorTest do
 
       assert ".github/workflows/release.yml" in result.written
       assert "scripts/install.sh" in result.written
+      assert "scripts/install.ps1" in result.written
       assert ".tinfoil/formula.rb.eex" in result.written
 
       assert File.exists?(Path.join(tmp, ".github/workflows/release.yml"))
