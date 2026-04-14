@@ -146,11 +146,13 @@ defmodule Tinfoil.PlanTest do
       # (macos-latest) owns the whole darwin family in grouped mode.
       darwin = Enum.find(entries, &(&1.id == "darwin"))
       assert darwin.runner == "macos-latest"
+
       assert String.split(darwin.targets, ",") |> Enum.sort() ==
                ["darwin_arm64", "darwin_x86_64"]
 
       linux = Enum.find(entries, &(&1.id == "linux"))
       assert linux.runner == "ubuntu-latest"
+
       assert String.split(linux.targets, ",") |> Enum.sort() ==
                ["linux_arm64", "linux_x86_64"]
     end
