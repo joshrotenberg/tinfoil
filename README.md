@@ -256,6 +256,12 @@ before running `mix tinfoil.homebrew`, which clones over SSH. Deploy
 keys are scoped to a single repo and never expire, which is the main
 reason to prefer them over PATs.
 
+If your secret is named differently, override the name with
+`homebrew: [token_secret: "YOUR_NAME"]` or
+`homebrew: [deploy_key_secret: "YOUR_NAME"]`. The env var the mix
+task reads is fixed; only the secret reference in the workflow is
+configurable.
+
 ### NIFs and cross-compilation
 
 Burrito cross-compiles via Zig, which handles pure Erlang/Elixir deps

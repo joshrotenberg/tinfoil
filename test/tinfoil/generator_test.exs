@@ -119,6 +119,38 @@ defmodule Tinfoil.GeneratorTest do
       refute yaml =~ "HOMEBREW_TAP_TOKEN"
     end
 
+    test "workflow respects custom token_secret + deploy_key_secret names" do
+      token_yaml =
+        build_config(
+          homebrew: [
+            enabled: true,
+            tap: "owner/tap",
+            auth: :token,
+            token_secret: "COMMITTER_TOKEN"
+          ]
+        )
+        |> Generator.render_workflow()
+
+      # Env var name the mix task reads is fixed; only the secret reference
+      # mapped into it is configurable.
+      assert token_yaml =~ "HOMEBREW_TAP_TOKEN: ${{ secrets.COMMITTER_TOKEN }}"
+      refute token_yaml =~ "secrets.HOMEBREW_TAP_TOKEN"
+
+      key_yaml =
+        build_config(
+          homebrew: [
+            enabled: true,
+            tap: "owner/tap",
+            auth: :deploy_key,
+            deploy_key_secret: "TAP_DEPLOY_KEY"
+          ]
+        )
+        |> Generator.render_workflow()
+
+      assert key_yaml =~ "ssh-private-key: ${{ secrets.TAP_DEPLOY_KEY }}"
+      refute key_yaml =~ "secrets.HOMEBREW_TAP_DEPLOY_KEY"
+    end
+
     test "workflow delegates build to mix tinfoil.build" do
       yaml = build_config() |> Generator.render_workflow()
 
