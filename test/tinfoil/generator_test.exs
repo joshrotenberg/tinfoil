@@ -82,6 +82,19 @@ defmodule Tinfoil.GeneratorTest do
       assert yaml =~ "ubuntu-latest"
     end
 
+    test "workflow collapses targets per os family when single_runner_per_os" do
+      yaml =
+        build_config(single_runner_per_os: true)
+        |> Generator.render_workflow()
+
+      # Per-target ids are gone; we get one matrix entry per os_family
+      # carrying a comma-separated targets string the build step loops over.
+      refute yaml =~ "id: darwin_arm64"
+      assert yaml =~ "id: darwin"
+      assert yaml =~ "id: linux"
+      assert yaml =~ ~s(targets: "darwin_arm64,darwin_x86_64")
+    end
+
     test "workflow respects configured tool versions" do
       yaml =
         build_config(ci: [elixir_version: "1.17", otp_version: "27", zig_version: "0.14.0"])

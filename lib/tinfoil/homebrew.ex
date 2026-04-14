@@ -1,8 +1,9 @@
 defmodule Tinfoil.Homebrew do
   @moduledoc """
-  Render a Homebrew formula from release artifacts and push it to a tap
-  repo. This is the Elixir replacement for the generated
-  `scripts/update-homebrew.sh` shell script.
+  Render a Homebrew formula from release artifacts and push it to a
+  tap repo. Earlier tinfoil versions shelled out to a generated
+  `scripts/update-homebrew.sh`; this module replaces it so the whole
+  release lifecycle stays in Elixir and is unit-testable.
 
   Called from `mix tinfoil.homebrew`, which the generated workflow
   invokes on a separate CI job after the GitHub Release publish step
