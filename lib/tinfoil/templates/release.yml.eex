@@ -35,7 +35,7 @@ jobs:
           otp-version: "<%= @ci.otp_version %>"
 
       - name: Set up Zig
-        uses: goto-bus-stop/setup-zig@v2
+        uses: mlugg/setup-zig@v2
         with:
           version: "<%= @ci.zig_version %>"
 
@@ -59,7 +59,7 @@ jobs:
           done
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: binary-${{ matrix.id }}
           path: _tinfoil/*
@@ -80,7 +80,7 @@ jobs:
           otp-version: "<%= @ci.otp_version %>"
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
@@ -122,13 +122,13 @@ jobs:
         run: mix deps.get
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
 <%= if @homebrew.auth == :deploy_key do %>
       - name: Set up SSH deploy key
-        uses: webfactory/ssh-agent@v0.9.0
+        uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.<%= @homebrew.deploy_key_secret %> }}
 <% end %>
