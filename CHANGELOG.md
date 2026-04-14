@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.4](https://github.com/joshrotenberg/tinfoil/compare/v0.2.3...v0.2.4) (2026-04-14)
+
+
+### Features
+
+* auto-detect OTP/Zig versions, stricter Homebrew validation ([#37](https://github.com/joshrotenberg/tinfoil/issues/37)) ([69c7c9e](https://github.com/joshrotenberg/tinfoil/commit/69c7c9eaa76fb65201d36cd24f5c207eaf9f0844))
+* configurable prerelease pattern and user-defined targets ([#40](https://github.com/joshrotenberg/tinfoil/issues/40)) ([0cc1d8d](https://github.com/joshrotenberg/tinfoil/commit/0cc1d8d1e8f0f166d6c5f9888840f85143ca8ddb))
+* detect NIF deps that may not cross-compile cleanly ([#39](https://github.com/joshrotenberg/tinfoil/issues/39)) ([45935bf](https://github.com/joshrotenberg/tinfoil/commit/45935bf3abab0067f7faf1135b3e0f107103efa3))
+* stream asset uploads, bump actions to v5 ([#38](https://github.com/joshrotenberg/tinfoil/issues/38)) ([d2d0795](https://github.com/joshrotenberg/tinfoil/commit/d2d07955142fd0cbb86eddbe77e55095b9070c5a))
+* tag/version validation, test helpers, darwin runner fix ([#34](https://github.com/joshrotenberg/tinfoil/issues/34)) ([b9c2428](https://github.com/joshrotenberg/tinfoil/commit/b9c242887dd6d47616efd1a9f9027242bc3d4ab4)), closes [#15](https://github.com/joshrotenberg/tinfoil/issues/15)
+
+
+### Bug Fixes
+
+* revert release-please-action to v4 (v5 does not exist) ([#41](https://github.com/joshrotenberg/tinfoil/issues/41)) ([0be709a](https://github.com/joshrotenberg/tinfoil/commit/0be709a63e7809127b3d17898daeb5f8b334affe))
+
 ## [0.2.3](https://github.com/joshrotenberg/tinfoil/compare/v0.2.2...v0.2.3) (2026-04-10)
 
 
