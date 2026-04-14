@@ -77,7 +77,8 @@ defmodule Tinfoil.Config do
     app = Keyword.fetch!(project, :app)
 
     with {:ok, tinfoil} <- fetch_tinfoil(project),
-         {:ok, extra_targets} <- Target.validate_extras(Keyword.get(tinfoil, :extra_targets, %{})),
+         {:ok, extra_targets} <-
+           Target.validate_extras(Keyword.get(tinfoil, :extra_targets, %{})),
          {:ok, targets} <- fetch_targets(tinfoil),
          :ok <- Target.validate(targets, extra_targets),
          {:ok, archive_name} <- fetch_archive_name(tinfoil),
