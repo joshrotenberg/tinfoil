@@ -283,6 +283,18 @@ defmodule Tinfoil.GeneratorTest do
       assert sh =~ ~s(REPO="owner/my_cli")
       assert sh =~ ~s(DEFAULT_INSTALL_DIR="~/.local/bin")
     end
+
+    test "verifies via the combined checksums-sha256.txt" do
+      sh =
+        build_config(installer: [enabled: true])
+        |> Generator.render_installer()
+
+      # Per-archive .sha256 sidecars are NOT release assets; the combined
+      # file is, and the script must look there or it'll always skip
+      # verification (see https://github.com/joshrotenberg/tinfoil/issues/...).
+      assert sh =~ "checksums-sha256.txt"
+      refute sh =~ ".tar.gz.sha256"
+    end
   end
 
   describe "write!/2" do
