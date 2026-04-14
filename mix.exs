@@ -1,7 +1,7 @@
 defmodule Tinfoil.MixProject do
   use Mix.Project
 
-  @version "0.2.13"
+  @version "0.2.14"
   @source_url "https://github.com/joshrotenberg/tinfoil"
 
   def project do
