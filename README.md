@@ -5,29 +5,59 @@
 [![HexDocs](https://img.shields.io/badge/hex-docs-blue.svg)](https://hexdocs.pm/tinfoil)
 [![License](https://img.shields.io/hexpm/l/tinfoil.svg)](https://github.com/joshrotenberg/tinfoil/blob/main/LICENSE)
 
-Release automation for [Burrito](https://github.com/burrito-elixir/burrito)-based Elixir CLIs.
+Release automation for [Burrito](https://github.com/burrito-elixir/burrito)-based Elixir CLIs. Tag a version, tinfoil ships the binaries.
 
-Tinfoil reads a `:tinfoil` keyword in your `mix.exs`, generates a
-GitHub Actions workflow, and provides `mix` tasks that workflow calls
-at CI time to build each target, package the binary as a tar.gz with a
-sha256 sidecar, create a GitHub Release, and upload the assets.
+## What you get
 
-> **Status:** pre-1.0. The mix tasks, workflow template, and Hex publish
-> loop are all in place and dogfooded against a real Burrito project.
-> Defaults and target strategies are still evolving — pin to an exact
-> minor version if you need stability.
+One `git tag v1.0.0 && git push --tags` produces:
+
+- **Cross-compiled binaries** for darwin (arm64, x86_64), linux
+  (arm64, x86_64 musl), and windows (x86_64) — built on GitHub
+  Actions, cross-compiled via Zig (no native ARM or Windows runner
+  required).
+- **A GitHub Release** with every archive attached, a combined
+  `checksums-sha256.txt`, and release notes auto-generated from
+  your commits.
+- **A `curl | sh` installer** (optional) at `scripts/install.sh`
+  that picks the right tarball for the user's OS/arch and verifies
+  the sha256 before installing.
+- **An updated Homebrew formula** (optional) pushed to your tap so
+  `brew install you/tap/yourcli` just works — tinfoil renders
+  `Formula/yourcli.rb` with real URLs + SHAs and commits it, under
+  either a PAT or an SSH deploy key.
+- **A regeneratable workflow.** `mix tinfoil.generate` rewrites
+  `.github/workflows/release.yml` from your `mix.exs` config, so
+  upgrading tinfoil upgrades the pipeline.
+
+All configured via one `:tinfoil` keyword in `mix.exs`; no hand-edited
+YAML. See [tinfoil_demo](https://github.com/joshrotenberg/tinfoil_demo)
+for a full working project.
+
+> **Status:** pre-1.0. The mix tasks, workflow template, and Hex
+> publish loop are all in place and dogfooded against a real Burrito
+> project. Defaults and target strategies are still evolving — pin
+> to an exact minor version if you need stability.
+
+## How it works
+
+Tinfoil reads the `:tinfoil` keyword in `mix.exs`, resolves it
+against your Burrito `:releases` config, and provides `mix` tasks
+the generated workflow calls at CI time. The workflow runs one
+build job per target (or one per OS family if you opt into
+`single_runner_per_os`), uploads artifacts, and a release job
+stitches them into a GitHub Release plus (optionally) a Homebrew
+tap push.
 
 ## Scope
 
-Burrito packages an Elixir application into a single binary. Tinfoil
-handles the steps around that: the CI matrix that runs the builds, the
-archive + checksum packaging, the GitHub Release creation, and
-(optionally) an installer script and a Homebrew formula template.
+Burrito packages an Elixir application into a single binary.
+Tinfoil handles the steps around that: the CI matrix, archive +
+checksum packaging, the GitHub Release, and the installer /
+Homebrew surfaces.
 
-It does not replace Burrito, and it does not try to handle everything
-a release pipeline might ever want — anything beyond creating a
-GitHub Release and publishing archives (signing, notarization, custom
-distribution channels, etc.) is out of scope.
+It does not replace Burrito, and anything beyond publishing
+archives (signing, notarization, non-GitHub distribution, etc.) is
+out of scope.
 
 ## Installation
 
