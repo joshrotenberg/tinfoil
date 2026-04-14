@@ -62,7 +62,7 @@ defmodule Tinfoil.MixProject do
         "Changelog" => "#{@source_url}/blob/main/CHANGELOG.md",
         "Hex" => "https://hex.pm/packages/tinfoil"
       },
-      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md)
+      files: ~w(lib priv/templates mix.exs README.md LICENSE CHANGELOG.md)
     ]
   end
 
