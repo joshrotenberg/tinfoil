@@ -280,7 +280,15 @@ defmodule Tinfoil.Config do
   end
 
   defp merge_homebrew(user, project) do
-    defaults = %{enabled: false, tap: nil, formula_name: nil, auth: :token}
+    defaults = %{
+      enabled: false,
+      tap: nil,
+      formula_name: nil,
+      auth: :token,
+      token_secret: "HOMEBREW_TAP_TOKEN",
+      deploy_key_secret: "HOMEBREW_TAP_DEPLOY_KEY"
+    }
+
     merged = Map.merge(defaults, Map.new(user))
 
     formula_name =

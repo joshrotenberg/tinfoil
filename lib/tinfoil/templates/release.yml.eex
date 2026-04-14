@@ -130,10 +130,10 @@ jobs:
       - name: Set up SSH deploy key
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+          ssh-private-key: ${{ secrets.<%= @homebrew.deploy_key_secret %> }}
 <% end %>
       - name: Update Homebrew formula<%= if @homebrew.auth == :token do %>
         env:
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}<% end %>
+          HOMEBREW_TAP_TOKEN: ${{ secrets.<%= @homebrew.token_secret %> }}<% end %>
         run: mix tinfoil.homebrew --input-dir artifacts
 <% end %>
