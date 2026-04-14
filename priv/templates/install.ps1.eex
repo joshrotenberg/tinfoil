@@ -66,15 +66,19 @@ try {
   $SumsPath = Join-Path $Tmp "checksums-sha256.txt"
   try {
     Invoke-WebRequest -Uri $SumsUrl -OutFile $SumsPath -UseBasicParsing
-    # Each line is "<sha>  <filename>"; grab the one matching our archive.
-    $line = Get-Content $SumsPath |
-      Where-Object { $_ -match ("\\s" + [regex]::Escape($Archive) + "\$") } |
-      Select-Object -First 1
+    # Each line in checksums-sha256.txt is "<sha>  <filename>" (two
+    # spaces). Match by suffix — PowerShell's -like uses * as wildcard,
+    # no regex escaping needed. Handle both "  name" and "  *name"
+    # (the binary-mode prefix some tools emit).
+    $line = Get-Content $SumsPath | Where-Object {
+      $_ -like "* $Archive" -or $_ -like "*`*$Archive"
+    } | Select-Object -First 1
 
     if (-not $line) {
       throw "no checksum entry for $Archive in checksums-sha256.txt"
     }
 
+    # Split on any run of whitespace; first field is the sha.
     $expected = ($line -split '\s+')[0]
     $actual = (Get-FileHash -Path $ArchivePath -Algorithm SHA256).Hash.ToLower()
 
