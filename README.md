@@ -77,9 +77,8 @@ mix tinfoil.init
 ```
 
 That generates `.github/workflows/release.yml` and, if enabled, an
-installer script, a Homebrew formula template, and a tap update
-script. Commit the generated files and push a tag like `v0.1.0` to
-trigger the workflow.
+installer script, and a Homebrew formula template. Commit the
+generated files and push a tag like `v0.1.0` to trigger the workflow.
 
 ## Generated files
 
@@ -88,8 +87,7 @@ your-project/
 ├── .github/workflows/release.yml    ← CI pipeline (always)
 ├── .tinfoil/formula.rb.eex          ← if homebrew enabled
 ├── scripts/
-│   ├── install.sh                   ← if installer enabled
-│   └── update-homebrew.sh           ← if homebrew enabled
+│   └── install.sh                   ← if installer enabled
 └── mix.exs
 ```
 
@@ -97,7 +95,8 @@ The workflow runs a build job per configured target in parallel. Each
 job calls `mix tinfoil.build`, which produces one `.tar.gz` with a
 sha256 sidecar. A release job then collects the artifacts, calls
 `mix tinfoil.publish` to create the GitHub Release, and (if homebrew
-is enabled) runs the tap update script.
+is enabled) calls `mix tinfoil.homebrew` to render the formula and
+push it to the configured tap.
 
 ## Tasks
 
@@ -108,6 +107,7 @@ is enabled) runs the tap update script.
 | `mix tinfoil.plan`       | Print what would be built and released. Supports `--format human` (default), `--format json`, and `--format matrix` for GitHub Actions consumption. |
 | `mix tinfoil.build`      | Build a single target: run `mix release` with the right `BURRITO_TARGET`, package the binary into a tar.gz, and write a sha256 sidecar. Called by the generated workflow once per matrix entry. |
 | `mix tinfoil.publish`    | Create a GitHub Release from artifacts in `artifacts/` and upload every archive plus a combined `checksums-sha256.txt`. Tags containing `-rc`, `-beta`, or `-alpha` are marked as prereleases. Pass `--replace` to delete and recreate if a release for the tag already exists. |
+| `mix tinfoil.homebrew`   | Render the Homebrew formula from `artifacts/` and push it to the configured tap. Honors `homebrew.auth` for choosing between a PAT (`HOMEBREW_TAP_TOKEN`) and an SSH deploy key. |
 
 The generated workflow invokes `mix tinfoil.build` and
 `mix tinfoil.publish` directly, so tinfoil version bumps usually take
@@ -230,6 +230,25 @@ and cross-compiles the x86 slice via Zig). This trades wall-clock
 parallelism for fewer runner-minutes; leave it off if your builds
 don't contend for runners.
 
+### Homebrew auth
+
+The `homebrew:` job needs push access to the tap repo. Two auth
+modes are supported:
+
+**`auth: :token`** (default). The workflow expects a
+`HOMEBREW_TAP_TOKEN` repo secret -- a Personal Access Token (classic
+or fine-grained) with `contents: write` on the tap repo. The mix
+task clones over HTTPS with the token baked into the URL.
+
+**`auth: :deploy_key`**. Generate an SSH key pair, add the public
+key to the tap repo's deploy keys (with write access), and set the
+private key as the `HOMEBREW_TAP_DEPLOY_KEY` secret on the CLI
+repo. The generated workflow installs
+[`webfactory/ssh-agent`](https://github.com/webfactory/ssh-agent)
+before running `mix tinfoil.homebrew`, which clones over SSH. Deploy
+keys are scoped to a single repo and never expire, which is the main
+reason to prefer them over PATs.
+
 ### NIFs and cross-compilation
 
 Burrito cross-compiles via Zig, which handles pure Erlang/Elixir deps
@@ -259,12 +278,13 @@ tinfoil: [
     draft: false
   ],
 
-  # Homebrew formula generation. Requires a HOMEBREW_TAP_TOKEN secret with
-  # repo access to the tap.
+  # Homebrew formula generation. Requires auth material for the tap
+  # repo — either HOMEBREW_TAP_TOKEN (PAT) or an SSH deploy key.
   homebrew: [
     enabled: true,
     tap: "owner/homebrew-tap",
-    formula_name: "my_cli"  # defaults to the app name
+    formula_name: "my_cli", # defaults to the app name
+    auth: :token            # or :deploy_key (default :token)
   ],
 
   # Shell installer script.
