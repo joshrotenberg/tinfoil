@@ -81,6 +81,53 @@ defmodule Tinfoil.ArchiveTest do
     end
   end
 
+  describe "tar_gz with :extras" do
+    @tag :tmp_dir
+    test "bundles extra files alongside the binary at their dest paths", %{tmp_dir: tmp} do
+      binary_path = Path.join(tmp, "woof_macos_m1")
+      File.write!(binary_path, "bytes")
+
+      File.write!(Path.join(tmp, "LICENSE"), "MIT License")
+      File.mkdir_p!(Path.join(tmp, "man"))
+      File.write!(Path.join(tmp, "man/woof.1"), "man page contents")
+
+      extras = [
+        {Path.join(tmp, "LICENSE"), "LICENSE"},
+        {Path.join(tmp, "man/woof.1"), "share/man/man1/woof.1"}
+      ]
+
+      output_dir = Path.join(tmp, "out")
+
+      archive =
+        Archive.tar_gz(binary_path, :woof, "woof-0.1.0-linux", output_dir, extras)
+
+      extract_dir = Path.join(tmp, "ex")
+      File.mkdir_p!(extract_dir)
+
+      :ok =
+        :erl_tar.extract(String.to_charlist(archive), [
+          :compressed,
+          {:cwd, String.to_charlist(extract_dir)}
+        ])
+
+      assert File.read!(Path.join(extract_dir, "woof")) == "bytes"
+      assert File.read!(Path.join(extract_dir, "LICENSE")) == "MIT License"
+      assert File.read!(Path.join(extract_dir, "share/man/man1/woof.1")) == "man page contents"
+    end
+
+    @tag :tmp_dir
+    test "raises when an extra path doesn't exist", %{tmp_dir: tmp} do
+      binary_path = Path.join(tmp, "woof")
+      File.write!(binary_path, "bytes")
+
+      extras = [{Path.join(tmp, "missing"), "LICENSE"}]
+
+      assert_raise RuntimeError, ~r/extra_artifacts entry not found/, fn ->
+        Archive.tar_gz(binary_path, :woof, "woof-0.1.0", Path.join(tmp, "out"), extras)
+      end
+    end
+  end
+
   describe "zip/4" do
     @tag :tmp_dir
     test "creates a zip with the binary renamed to name_in_archive", %{tmp_dir: tmp} do
@@ -113,6 +160,27 @@ defmodule Tinfoil.ArchiveTest do
         :zip.extract(String.to_charlist(archive), [{:cwd, String.to_charlist(extract_dir)}])
 
       assert File.read!(Path.join(extract_dir, "demo.exe")) == "fake-windows-binary"
+    end
+
+    @tag :tmp_dir
+    test "zip also bundles extra files at their dest paths", %{tmp_dir: tmp} do
+      bin = Path.join(tmp, "demo.exe")
+      File.write!(bin, "fake-windows-binary")
+
+      File.write!(Path.join(tmp, "LICENSE.txt"), "license bytes")
+
+      extras = [{Path.join(tmp, "LICENSE.txt"), "LICENSE.txt"}]
+
+      archive = Archive.zip(bin, "demo.exe", "demo-0.1.0-win", Path.join(tmp, "out"), extras)
+
+      extract_dir = Path.join(tmp, "ex")
+      File.mkdir_p!(extract_dir)
+
+      {:ok, _} =
+        :zip.extract(String.to_charlist(archive), [{:cwd, String.to_charlist(extract_dir)}])
+
+      assert File.read!(Path.join(extract_dir, "demo.exe")) == "fake-windows-binary"
+      assert File.read!(Path.join(extract_dir, "LICENSE.txt")) == "license bytes"
     end
   end
 

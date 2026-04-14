@@ -106,6 +106,44 @@ defmodule Tinfoil.ConfigTest do
       assert Config.archive_filename(config, :linux_riscv64) =~ "riscv64-unknown-linux-musl"
     end
 
+    test "normalizes :extra_artifacts bare strings and source/dest maps" do
+      {:ok, config} =
+        Config.load(
+          base_project(
+            targets: [:darwin_arm64, :linux_x86_64],
+            extra_artifacts: [
+              "LICENSE",
+              %{source: "man/myapp.1", dest: "share/man/man1/myapp.1"}
+            ]
+          )
+        )
+
+      assert config.extra_artifacts == [
+               {"LICENSE", "LICENSE"},
+               {"man/myapp.1", "share/man/man1/myapp.1"}
+             ]
+    end
+
+    test "rejects malformed :extra_artifacts entries" do
+      assert {:error, {:invalid_extra_artifact, {:not_a_path, 42}}} =
+               Config.load(
+                 base_project(
+                   targets: [:darwin_arm64, :linux_x86_64],
+                   extra_artifacts: [{:not_a_path, 42}]
+                 )
+               )
+    end
+
+    test "rejects non-list :extra_artifacts" do
+      assert {:error, {:invalid_extra_artifacts, "nope"}} =
+               Config.load(
+                 base_project(
+                   targets: [:darwin_arm64, :linux_x86_64],
+                   extra_artifacts: "nope"
+                 )
+               )
+    end
+
     test "rejects non-regex :prerelease_pattern" do
       assert {:error, {:invalid_prerelease_pattern, "not-a-regex"}} =
                Config.load(
