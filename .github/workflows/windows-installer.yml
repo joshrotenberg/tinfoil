@@ -84,7 +84,12 @@ jobs:
       - name: Run the installed binary
         shell: pwsh
         run: |
-          $out = & ".\bin\tinfoil_demo.exe" info
+          # `& ...` captures stdout as a string array (one element per
+          # line). `-notmatch` against an array returns the non-matching
+          # elements, which is truthy whenever ANY line doesn't match.
+          # Join into a single string before testing so the assertion is
+          # actually a boolean.
+          $out = (& ".\bin\tinfoil_demo.exe" info) -join "`n"
           Write-Host $out
           if ($out -notmatch "tinfoil_demo") {
             throw "installed binary did not emit expected output; got: $out"
