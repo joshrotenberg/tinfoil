@@ -13,7 +13,11 @@ defmodule Tinfoil.Generator do
 
   alias Tinfoil.Config
 
-  @templates_dir Path.join([__DIR__, "templates"])
+  # Templates live in priv/ so they ship with the OTP app regardless of
+  # distribution shape (hex tarball, local archive install, etc.). Using
+  # `__DIR__` would bake in the path of the source tree at compile time,
+  # which vanishes after a `mix archive.install`.
+  defp templates_dir, do: :code.priv_dir(:tinfoil) |> List.to_string() |> Path.join("templates")
 
   @type generated :: %{path: Path.t(), contents: String.t(), executable: boolean()}
 
@@ -199,7 +203,7 @@ defmodule Tinfoil.Generator do
   ## ───────────── internals ─────────────
 
   defp eval(name, assigns) do
-    path = Path.join(@templates_dir, name)
+    path = Path.join(templates_dir(), name)
     EEx.eval_file(path, assigns: assigns)
   end
 
