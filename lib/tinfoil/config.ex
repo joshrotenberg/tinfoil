@@ -40,6 +40,7 @@ defmodule Tinfoil.Config do
     prerelease_pattern: nil,
     extra_targets: %{},
     single_runner_per_os: false,
+    attestations: true,
     ci: %{
       provider: :github_actions,
       elixir_version: "1.19",
@@ -65,6 +66,7 @@ defmodule Tinfoil.Config do
           prerelease_pattern: Regex.t(),
           extra_targets: Target.extras(),
           single_runner_per_os: boolean(),
+          attestations: boolean(),
           ci: map()
         }
 
@@ -106,6 +108,7 @@ defmodule Tinfoil.Config do
         prerelease_pattern: prerelease_pattern,
         extra_targets: extra_targets,
         single_runner_per_os: Keyword.get(tinfoil, :single_runner_per_os, false),
+        attestations: Keyword.get(tinfoil, :attestations, true),
         ci: merge_ci(Keyword.get(tinfoil, :ci, []), project)
       }
 

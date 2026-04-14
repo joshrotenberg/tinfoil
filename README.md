@@ -23,9 +23,10 @@ One `git tag v1.0.0 && git push --tags` produces:
   right asset for the user's OS/arch and verify the sha256 before
   installing.
 - **An updated Homebrew formula** (optional) pushed to your tap so
-  `brew install you/tap/yourcli` just works — tinfoil renders
-  `Formula/yourcli.rb` with real URLs + SHAs and commits it, under
-  either a PAT or an SSH deploy key.
+  `brew install you/tap/yourcli` just works on macOS *and* Linux
+  (via Linuxbrew, no extra config) — tinfoil renders `Formula/yourcli.rb`
+  with real URLs + SHAs and commits it, under either a PAT or an
+  SSH deploy key.
 - **A regeneratable workflow.** `mix tinfoil.generate` rewrites
   `.github/workflows/release.yml` from your `mix.exs` config, so
   upgrading tinfoil upgrades the pipeline.
@@ -332,6 +333,14 @@ If your secret is named differently, override the name with
 task reads is fixed; only the secret reference in the workflow is
 configurable.
 
+#### Linuxbrew
+
+The generated formula's `on_linux` block makes it work under
+[Linuxbrew](https://docs.brew.sh/Homebrew-on-Linux) too -- no
+separate config needed. Linux users can run
+`brew install owner/tap/myapp` the same way macOS users do, and
+they'll pull the matching `linux_x86_64` or `linux_arm64` tarball.
+
 ### Runtime output from the wrapped binary
 
 A Burrito-wrapped binary prints a handful of diagnostic lines to
@@ -400,6 +409,13 @@ tinfoil: [
   ],
 
   checksums: :sha256,
+
+  # GitHub build provenance attestations on every uploaded artifact.
+  # Defaults to true; set false to opt out (which also drops the
+  # `id-token: write` and `attestations: write` permissions from the
+  # generated workflow).
+  attestations: true,
+
 
   ci: [
     provider: :github_actions,

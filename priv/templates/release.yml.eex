@@ -7,7 +7,9 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: write<%= if @attestations do %>
+  id-token: write
+  attestations: write<% end %>
 
 env:
   MIX_ENV: prod
@@ -64,6 +66,12 @@ jobs:
           name: binary-${{ matrix.id }}
           path: _tinfoil/*
           if-no-files-found: error
+<%= if @attestations do %>
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: _tinfoil/*.tar.gz, _tinfoil/*.zip
+<% end %>
 
   release:
     name: Release
