@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.8](https://github.com/joshrotenberg/tinfoil/compare/v0.2.7...v0.2.8) (2026-04-14)
+
+
+### Features
+
+* mix tinfoil.init --install splices dep and config into mix.exs ([#50](https://github.com/joshrotenberg/tinfoil/issues/50)) ([ec1cc55](https://github.com/joshrotenberg/tinfoil/commit/ec1cc55502ebf9a9ad860d48d94d938dda206bc8))
+* Tinfoil.Homebrew module + deploy-key auth ([#48](https://github.com/joshrotenberg/tinfoil/issues/48)) ([efe03b2](https://github.com/joshrotenberg/tinfoil/commit/efe03b238ea0c6cfc8641381c279c66c4fceb0ca))
+
 ## [0.2.7](https://github.com/joshrotenberg/tinfoil/compare/v0.2.6...v0.2.7) (2026-04-14)
 
 
