@@ -39,14 +39,17 @@ defmodule Tinfoil.TargetTest do
 
     test "validate_extras rejects shadowing a built-in" do
       shadow = %{darwin_arm64: @extra.linux_riscv64}
+
       assert {:error, {:extra_target_shadows_builtin, :darwin_arm64}} =
                Target.validate_extras(shadow)
     end
 
     test "validate_extras rejects missing keys" do
       incomplete = %{linux_riscv64: %{runner: "x", triple: "y"}}
+
       assert {:error, {:extra_target_missing_keys, :linux_riscv64, missing}} =
                Target.validate_extras(incomplete)
+
       assert :burrito_os in missing
     end
 

@@ -450,7 +450,6 @@ defmodule Tinfoil.Config do
         "Either name a release after the app or keep a single release."
 
   defp format_error({:no_matching_burrito_target, target, spec}) do
-
     "tinfoil target #{inspect(target)} has no matching Burrito target " <>
       "(looking for [os: #{inspect(spec.burrito_os)}, cpu: #{inspect(spec.burrito_cpu)}]). " <>
       "Add a matching entry to your :burrito :targets in mix.exs."
