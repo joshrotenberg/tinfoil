@@ -70,6 +70,16 @@ defmodule Tinfoil.Target do
       triple: "aarch64-unknown-linux-musl",
       archive_ext: ".tar.gz",
       os_family: :linux
+    },
+    windows_x86_64: %{
+      # Burrito cross-compiles the Windows .exe from Linux via Zig; a
+      # native Windows runner is not needed and is slower anyway.
+      runner: "ubuntu-latest",
+      burrito_os: :windows,
+      burrito_cpu: :x86_64,
+      triple: "x86_64-pc-windows-msvc",
+      archive_ext: ".zip",
+      os_family: :windows
     }
   }
 

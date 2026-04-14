@@ -20,8 +20,8 @@ defmodule Tinfoil.ConfigTest do
     end
 
     test "returns an error on unknown targets" do
-      assert {:error, {:unknown_targets, [:windows_x86_64]}} =
-               Config.load(base_project(targets: [:darwin_arm64, :windows_x86_64]))
+      assert {:error, {:unknown_targets, [:openbsd_x86_64]}} =
+               Config.load(base_project(targets: [:darwin_arm64, :openbsd_x86_64]))
     end
 
     test "loads a minimal config with defaults" do
@@ -411,7 +411,7 @@ defmodule Tinfoil.ConfigTest do
   describe "load!/1" do
     test "raises a readable error on invalid config" do
       assert_raise ArgumentError, ~r/unknown tinfoil targets/, fn ->
-        Config.load!(base_project(targets: [:windows_x86_64]))
+        Config.load!(base_project(targets: [:openbsd_x86_64]))
       end
     end
 

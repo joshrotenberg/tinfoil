@@ -17,7 +17,13 @@ defmodule Tinfoil.TargetTest do
   describe "builtin/0 and all/1" do
     test "builtin/0 returns just the hardcoded targets" do
       assert Enum.sort(Target.builtin()) ==
-               Enum.sort([:darwin_arm64, :darwin_x86_64, :linux_arm64, :linux_x86_64])
+               Enum.sort([
+                 :darwin_arm64,
+                 :darwin_x86_64,
+                 :linux_arm64,
+                 :linux_x86_64,
+                 :windows_x86_64
+               ])
     end
 
     test "all/1 merges extras on top of builtins" do
@@ -96,14 +102,26 @@ defmodule Tinfoil.TargetTest do
     end
   end
 
+  describe "windows_x86_64" do
+    test "cross-compiles from ubuntu-latest with a zip archive" do
+      spec = Target.spec!(:windows_x86_64)
+      assert spec.runner == "ubuntu-latest"
+      assert spec.burrito_os == :windows
+      assert spec.burrito_cpu == :x86_64
+      assert spec.triple == "x86_64-pc-windows-msvc"
+      assert spec.archive_ext == ".zip"
+      assert spec.os_family == :windows
+    end
+  end
+
   describe "validate/1" do
     test "accepts a list of known targets" do
       assert Target.validate([:darwin_arm64, :linux_x86_64]) == :ok
     end
 
     test "returns an error tuple listing unknown targets" do
-      assert {:error, {:unknown_targets, [:windows_x86_64, :freebsd_x86_64]}} =
-               Target.validate([:darwin_arm64, :windows_x86_64, :freebsd_x86_64])
+      assert {:error, {:unknown_targets, [:openbsd_x86_64, :freebsd_x86_64]}} =
+               Target.validate([:darwin_arm64, :openbsd_x86_64, :freebsd_x86_64])
     end
   end
 end
