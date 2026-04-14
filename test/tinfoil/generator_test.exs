@@ -127,7 +127,7 @@ defmodule Tinfoil.GeneratorTest do
     test "build job caches deps per matrix target" do
       yaml = build_config() |> Generator.render_workflow()
 
-      assert yaml =~ "actions/cache@v4"
+      assert yaml =~ "actions/cache@v5"
       # Build cache key includes the matrix target so each runner has its own
       assert yaml =~ ~s(key: ${{ runner.os }}-${{ matrix.target }}-mix-)
     end

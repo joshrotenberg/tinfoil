@@ -276,15 +276,23 @@ defmodule Tinfoil.Publish do
     end
   end
 
+  # 64KB chunks balance syscall overhead against memory footprint; the body
+  # is streamed so a multi-hundred-MB asset never sits in RAM as a single binary.
+  @upload_chunk_bytes 64 * 1024
+
   defp upload_one(req, upload_template, path) do
     name = Path.basename(path)
     upload_url = String.replace(upload_template, ~r/\{\?.*\}/, "")
-    body = File.read!(path)
+    size = File.stat!(path).size
+    body = chunked_stream(path, @upload_chunk_bytes)
 
     case Req.post(req,
            url: upload_url,
            params: [name: name],
-           headers: [{"content-type", content_type(path)}],
+           headers: [
+             {"content-type", content_type(path)},
+             {"content-length", Integer.to_string(size)}
+           ],
            body: body
          ) do
       {:ok, %Req.Response{status: status}} when status in 200..299 ->
@@ -296,6 +304,21 @@ defmodule Tinfoil.Publish do
       {:error, reason} ->
         {:error, {:upload_error, name, reason}}
     end
+  end
+
+  # File.stream!/3 arg order flipped between Elixir 1.15 and 1.16+, so we roll
+  # our own chunked reader rather than branch on version.
+  defp chunked_stream(path, chunk_bytes) do
+    Stream.resource(
+      fn -> File.open!(path, [:read, :binary]) end,
+      fn io ->
+        case IO.binread(io, chunk_bytes) do
+          :eof -> {:halt, io}
+          data when is_binary(data) -> {[data], io}
+        end
+      end,
+      &File.close/1
+    )
   end
 
   defp content_type(path) do
