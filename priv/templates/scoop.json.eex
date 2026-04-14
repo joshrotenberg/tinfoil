@@ -1,0 +1,27 @@
+{
+  "version": "<%= @version %>",
+  "description": "<%= @description %>",
+  "homepage": "<%= @homepage %>",
+  "license": "<%= @license %>",
+  "architecture": {
+    "64bit": {
+      "url": "<%= @base_url %>/download/v<%= @version %>/<%= @app %>-<%= @version %>-x86_64-pc-windows-msvc.zip",
+      "hash": "<%= @sha_windows_x86_64 %>"
+    }
+  },
+  "bin": "<%= @app %>.exe",
+  "checkver": {
+    "github": "<%= @homepage %>"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "<%= @base_url %>/download/v$version/<%= @app %>-$version-x86_64-pc-windows-msvc.zip",
+        "hash": {
+          "url": "$baseurl/checksums-sha256.txt",
+          "regex": "([A-Fa-f0-9]{64})\\s+<%= @app %>-$version-x86_64-pc-windows-msvc\\.zip"
+        }
+      }
+    }
+  }
+}
