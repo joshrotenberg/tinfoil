@@ -64,6 +64,35 @@ defmodule Tinfoil.Homebrew do
           commit_message: String.t()
         }
 
+  @typedoc """
+  Known error atoms returned by `publish/2`. Catch-all is
+  `{:error, term()}` for unexpected failures.
+
+    * `:homebrew_not_enabled` -- config has `homebrew.enabled: false`
+    * `:missing_tag` -- no tag given and `GITHUB_REF_NAME` is unset
+    * `:missing_homebrew_tap_token` -- `auth: :token` but
+      `HOMEBREW_TAP_TOKEN` env var is missing or empty
+    * `{:missing_sha_sidecar, target, path}` -- a `.sha256` sidecar
+      file couldn't be read from `input_dir`
+    * `:malformed_sha_sidecar` -- a `.sha256` sidecar didn't contain a
+      64-hex-character digest
+    * `{:missing_formula_template, path}` -- the EEx formula template
+      couldn't be found (default `.tinfoil/formula.rb.eex`)
+    * `{:formula_template_read_error, path, reason}` -- template read
+      failed for a reason other than `:enoent`
+    * `{:git_failed, args, exit_status, output}` -- a `git` subprocess
+      call returned non-zero
+  """
+  @type error ::
+          :homebrew_not_enabled
+          | :missing_tag
+          | :missing_homebrew_tap_token
+          | :malformed_sha_sidecar
+          | {:missing_sha_sidecar, atom(), Path.t()}
+          | {:missing_formula_template, Path.t()}
+          | {:formula_template_read_error, Path.t(), term()}
+          | {:git_failed, [String.t()], non_neg_integer(), String.t()}
+
   @doc """
   Render the formula and push it to the tap repo.
 
@@ -80,7 +109,7 @@ defmodule Tinfoil.Homebrew do
       (see `Tinfoil.Homebrew.Git`); injected for testing
   """
   @spec publish(Config.t(), opts()) ::
-          {:ok, result()} | {:ok, preview()} | {:error, term()}
+          {:ok, result()} | {:ok, preview()} | {:error, error() | term()}
   def publish(config, opts \\ [])
 
   def publish(%Config{homebrew: %{enabled: false}}, _opts),
