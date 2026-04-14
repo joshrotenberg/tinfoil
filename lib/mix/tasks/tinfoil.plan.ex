@@ -34,7 +34,7 @@ defmodule Mix.Tasks.Tinfoil.Plan do
 
   use Mix.Task
 
-  alias Tinfoil.{Config, Plan}
+  alias Tinfoil.{Config, NifCheck, Plan}
 
   @impl Mix.Task
   def run(argv) do
@@ -55,6 +55,7 @@ defmodule Mix.Tasks.Tinfoil.Plan do
     case Keyword.get(opts, :format, "human") do
       "human" ->
         Mix.shell().info(render_human(plan))
+        warn_nifs()
 
       "json" ->
         Mix.shell().info(Jason.encode!(plan, pretty: true))
@@ -65,6 +66,30 @@ defmodule Mix.Tasks.Tinfoil.Plan do
       other ->
         Mix.raise("unknown --format: #{inspect(other)} (expected human, json, or matrix)")
     end
+  end
+
+  defp warn_nifs do
+    # Mix.Project.deps_paths/0 returns a map of name => path for all resolved
+    # deps; empty if `mix deps.get` hasn't been run, in which case we stay
+    # silent rather than emitting spurious warnings.
+    deps = Map.to_list(Mix.Project.deps_paths())
+
+    case NifCheck.check(deps) do
+      [] ->
+        :ok
+
+      warnings ->
+        Mix.shell().info("")
+        Mix.shell().info("  NIF warnings (may not cross-compile cleanly):")
+
+        Enum.each(warnings, &print_warning/1)
+    end
+  end
+
+  defp print_warning(%{name: name, reasons: reasons}) do
+    Enum.each(reasons, fn reason ->
+      Mix.shell().info("    #{name}: #{NifCheck.describe(reason)}")
+    end)
   end
 
   @doc false
