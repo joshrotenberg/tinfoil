@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.11](https://github.com/joshrotenberg/tinfoil/compare/v0.2.10...v0.2.11) (2026-04-14)
+
+
+### Features
+
+* tinfoil.init --install scaffolds a working Burrito project ([#68](https://github.com/joshrotenberg/tinfoil/issues/68)) ([347cf3a](https://github.com/joshrotenberg/tinfoil/commit/347cf3ad9b53514f9586a0f98fc1703a57e9e5e0))
+
 ## [0.2.10](https://github.com/joshrotenberg/tinfoil/compare/v0.2.9...v0.2.10) (2026-04-14)
 
 
