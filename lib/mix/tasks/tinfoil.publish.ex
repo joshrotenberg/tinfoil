@@ -31,6 +31,9 @@ defmodule Mix.Tasks.Tinfoil.Publish do
                       one. The git tag itself is untouched. Intended
                       for development / force-retag iteration loops,
                       not for released versions.
+    * `--dry-run`   — print what would be published (repo, tag,
+                      draft/prerelease flags, asset list + sizes)
+                      and exit without touching the GitHub API.
 
   Pre-release detection is automatic: tags containing `-rc`, `-beta`,
   or `-alpha` are marked as prerelease in the created release.
@@ -48,7 +51,8 @@ defmodule Mix.Tasks.Tinfoil.Publish do
           input_dir: :string,
           tag: :string,
           draft: :boolean,
-          replace: :boolean
+          replace: :boolean,
+          dry_run: :boolean
         ]
       )
 
@@ -58,7 +62,12 @@ defmodule Mix.Tasks.Tinfoil.Publish do
         {:error, reason} -> Mix.raise("tinfoil config error: #{inspect(reason)}")
       end
 
-    case Publish.publish(config, Keyword.take(opts, [:input_dir, :tag, :draft, :replace])) do
+    publish_opts = Keyword.take(opts, [:input_dir, :tag, :draft, :replace, :dry_run])
+
+    case Publish.publish(config, publish_opts) do
+      {:ok, %{dry_run: true} = preview} ->
+        report_preview(preview)
+
       {:ok, result} ->
         report(result)
 
@@ -84,6 +93,26 @@ defmodule Mix.Tasks.Tinfoil.Publish do
       Mix.shell().info([:green, "  - ", :reset, name])
     end)
   end
+
+  defp report_preview(preview) do
+    Mix.shell().info([:cyan, "tinfoil publish (dry-run)\n", :reset])
+    Mix.shell().info("  repo:       #{preview.repo}")
+    Mix.shell().info("  tag:        #{preview.tag}")
+    Mix.shell().info("  draft:      #{preview.draft}")
+    Mix.shell().info("  prerelease: #{preview.prerelease}")
+    Mix.shell().info("  replace:    #{preview.replace}")
+    Mix.shell().info("  assets:")
+
+    Enum.each(preview.assets, fn asset ->
+      Mix.shell().info("    - #{asset.name} (#{format_size(asset.size)})")
+    end)
+
+    Mix.shell().info("\n  no GitHub API calls made")
+  end
+
+  defp format_size(bytes) when bytes >= 1_048_576, do: "#{div(bytes, 1_048_576)} MB"
+  defp format_size(bytes) when bytes >= 1024, do: "#{div(bytes, 1024)} KB"
+  defp format_size(bytes), do: "#{bytes} B"
 
   defp format_error(:missing_github_token),
     do: "GITHUB_TOKEN (or GH_TOKEN) environment variable is not set"

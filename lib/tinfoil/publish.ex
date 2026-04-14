@@ -37,6 +37,7 @@ defmodule Tinfoil.Publish do
           tag: String.t() | nil,
           draft: boolean() | nil,
           replace: boolean() | nil,
+          dry_run: boolean() | nil,
           req: Req.Request.t() | nil
         ]
 
@@ -44,6 +45,16 @@ defmodule Tinfoil.Publish do
           release_id: integer(),
           html_url: String.t(),
           uploaded: [String.t()]
+        }
+
+  @type preview :: %{
+          dry_run: true,
+          repo: String.t(),
+          tag: String.t(),
+          draft: boolean(),
+          prerelease: boolean(),
+          replace: boolean(),
+          assets: [%{name: String.t(), path: Path.t(), size: non_neg_integer()}]
         }
 
   @doc """
@@ -80,8 +91,17 @@ defmodule Tinfoil.Publish do
   for development and force-retag iteration loops, not for published
   versions.
   """
-  @spec publish(Config.t(), opts()) :: {:ok, result()} | {:error, term()}
+  @spec publish(Config.t(), opts()) ::
+          {:ok, result()} | {:ok, preview()} | {:error, term()}
   def publish(%Config{} = config, opts \\ []) do
+    if Keyword.get(opts, :dry_run, false) do
+      dry_run(config, opts)
+    else
+      do_publish(config, opts)
+    end
+  end
+
+  defp do_publish(config, opts) do
     # Mix tasks don't auto-start their dep apps' supervision trees. Req
     # owns a built-in Finch pool named Req.Finch that must be running
     # before any request; without this call we crash with
@@ -106,6 +126,38 @@ defmodule Tinfoil.Publish do
            uploaded: uploaded
          }}
       end
+    end
+  end
+
+  # Compute everything real `publish/2` would send, without touching
+  # GitHub. Still writes the combined checksums file to `input_dir`
+  # because that's a side effect on the user's local tree that they
+  # probably want to inspect anyway.
+  defp dry_run(config, opts) do
+    input_dir = Keyword.get(opts, :input_dir, "artifacts")
+
+    with {:ok, repo} <- fetch_repo(config),
+         {:ok, tag} <- fetch_tag(opts),
+         :ok <- ensure_input_dir(input_dir) do
+      _combined = Archive.combined_checksums(input_dir)
+
+      asset_descriptors =
+        input_dir
+        |> list_assets()
+        |> Enum.map(fn path ->
+          %{name: Path.basename(path), path: path, size: File.stat!(path).size}
+        end)
+
+      {:ok,
+       %{
+         dry_run: true,
+         repo: repo,
+         tag: tag,
+         draft: Keyword.get(opts, :draft, config.github[:draft] || false),
+         prerelease: prerelease?(tag, config.prerelease_pattern),
+         replace: Keyword.get(opts, :replace, false),
+         assets: asset_descriptors
+       }}
     end
   end
 
@@ -337,6 +389,7 @@ defmodule Tinfoil.Publish do
   end
 
   @doc false
+  @spec prerelease?(String.t(), Regex.t()) :: boolean()
   def prerelease?(tag, %Regex{} = pattern) do
     tag =~ pattern
   end

@@ -103,6 +103,7 @@ defmodule Tinfoil.Generator do
   ## ───────────── individual template renderers ─────────────
 
   @doc false
+  @spec render_workflow(Config.t()) :: String.t()
   def render_workflow(%Config{} = config) do
     plan = Tinfoil.Plan.build(config)
 
@@ -119,6 +120,7 @@ defmodule Tinfoil.Generator do
   end
 
   @doc false
+  @spec render_formula(Config.t()) :: String.t()
   def render_formula(%Config{} = config) do
     repo = config.github.repo || "OWNER/REPO"
 
@@ -138,6 +140,7 @@ defmodule Tinfoil.Generator do
   end
 
   @doc false
+  @spec render_installer(Config.t()) :: String.t()
   def render_installer(%Config{} = config) do
     repo = config.github.repo || "OWNER/REPO"
 

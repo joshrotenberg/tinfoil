@@ -253,6 +253,62 @@ defmodule Tinfoil.HomebrewTest do
                )
     end
 
+    test "dry-run renders the formula without cloning or pushing", %{tmp_dir: tmp} do
+      write_formula_template(tmp)
+      input = Path.join(tmp, "artifacts")
+
+      write_artifacts(input, %{
+        "my_cli-1.2.3-aarch64-apple-darwin.tar.gz" => String.duplicate("a", 64),
+        "my_cli-1.2.3-x86_64-unknown-linux-musl.tar.gz" => String.duplicate("b", 64)
+      })
+
+      System.put_env("HOMEBREW_TAP_TOKEN", "secret-token")
+
+      # No git stub needed — dry-run must never invoke git.
+      {:ok, preview} =
+        Homebrew.publish(build_config(),
+          input_dir: input,
+          tag: "v1.2.3",
+          dry_run: true
+        )
+
+      assert preview.dry_run == true
+      assert preview.tap == "owner/homebrew-tap"
+      assert preview.auth == :token
+      assert preview.commit_message == "my_cli 1.2.3"
+      assert preview.formula_name == "my_cli.rb"
+      assert preview.formula =~ ~s|version "1.2.3"|
+      # The token must be redacted — never print the real secret.
+      refute preview.clone_url =~ "secret-token"
+      assert preview.clone_url =~ "x-access-token:****"
+    end
+
+    test "dry-run shows an SSH clone URL for deploy-key auth", %{tmp_dir: tmp} do
+      write_formula_template(tmp)
+      input = Path.join(tmp, "artifacts")
+
+      write_artifacts(input, %{
+        "my_cli-1.2.3-aarch64-apple-darwin.tar.gz" => String.duplicate("a", 64),
+        "my_cli-1.2.3-x86_64-unknown-linux-musl.tar.gz" => String.duplicate("b", 64)
+      })
+
+      config =
+        build_config(
+          homebrew: [
+            enabled: true,
+            tap: "owner/homebrew-tap",
+            formula_name: "my_cli",
+            auth: :deploy_key
+          ]
+        )
+
+      {:ok, preview} =
+        Homebrew.publish(config, input_dir: input, tag: "v1.2.3", dry_run: true)
+
+      assert preview.auth == :deploy_key
+      assert preview.clone_url == "git@github.com:owner/homebrew-tap.git"
+    end
+
     test "errors when homebrew is not enabled" do
       releases = [my_cli: [burrito: [targets: [darwin_arm64: [os: :darwin, cpu: :aarch64]]]]]
 
