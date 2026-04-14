@@ -135,17 +135,31 @@ defmodule Tinfoil.Config do
     |> String.replace("{target}", triple)
   end
 
-  @doc "Return the archive extension (including the leading dot)."
-  @spec archive_extension(t()) :: String.t()
-  def archive_extension(%__MODULE__{archive_format: :tar_gz}), do: ".tar.gz"
-  def archive_extension(%__MODULE__{archive_format: :zip}), do: ".zip"
+  @doc """
+  Return the archive extension (including the leading dot) for a target.
+
+  The target's own `archive_ext` wins when it differs from the
+  project-wide `:archive_format` -- notably, Windows targets are
+  always packaged as `.zip` regardless of the project setting since
+  Windows users don't expect `.tar.gz`.
+  """
+  @spec archive_extension(t(), Target.target()) :: String.t()
+  def archive_extension(%__MODULE__{} = config, target) do
+    case Target.spec!(target, config.extra_targets).archive_ext do
+      ".tar.gz" -> default_extension(config.archive_format)
+      other -> other
+    end
+  end
+
+  defp default_extension(:tar_gz), do: ".tar.gz"
+  defp default_extension(:zip), do: ".zip"
 
   @doc """
   Full archive file name for a target, including extension.
   """
   @spec archive_filename(t(), Target.target()) :: String.t()
   def archive_filename(%__MODULE__{} = config, target) do
-    archive_basename(config, target) <> archive_extension(config)
+    archive_basename(config, target) <> archive_extension(config, target)
   end
 
   ## ───────────────────── internals ─────────────────────
