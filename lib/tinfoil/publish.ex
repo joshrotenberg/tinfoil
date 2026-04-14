@@ -57,6 +57,39 @@ defmodule Tinfoil.Publish do
           assets: [%{name: String.t(), path: Path.t(), size: non_neg_integer()}]
         }
 
+  @typedoc """
+  Known error atoms returned by `publish/2`. Callers can pattern-match
+  on these; the catch-all is `{:error, term()}` for unexpected failures.
+
+    * `:missing_github_token` -- no `GITHUB_TOKEN` / `GH_TOKEN` env var
+    * `:missing_tag` -- no tag given and `GITHUB_REF_NAME` is unset
+    * `:release_already_exists_no_replace` -- release for the tag
+      already exists and `replace: true` wasn't passed
+    * `{:missing_input_dir, dir}` -- input directory doesn't exist
+    * `{:create_release_failed, status, body}` -- GitHub API refused
+      the release create (non-201, non-422)
+    * `{:find_release_failed, status, body}` -- lookup for existing
+      release during `--replace` failed
+    * `{:delete_release_failed, status, body}` -- delete during
+      `--replace` failed
+    * `{:upload_failed, name, status, body}` -- asset upload returned
+      non-2xx
+    * `{:upload_error, name, reason}` -- asset upload transport failure
+    * `"... :github :repo is unresolved ..."` (string) -- the tinfoil
+      `github.repo` config isn't set and couldn't be inferred from git
+  """
+  @type error ::
+          :missing_github_token
+          | :missing_tag
+          | :release_already_exists_no_replace
+          | {:missing_input_dir, Path.t()}
+          | {:create_release_failed, non_neg_integer(), term()}
+          | {:find_release_failed, non_neg_integer(), term()}
+          | {:delete_release_failed, non_neg_integer(), term()}
+          | {:upload_failed, String.t(), non_neg_integer(), term()}
+          | {:upload_error, String.t(), term()}
+          | String.t()
+
   @doc """
   Publish release archives from `input_dir` (default `"artifacts"`) to
   a new GitHub Release on the repo configured in the tinfoil config.
@@ -92,7 +125,7 @@ defmodule Tinfoil.Publish do
   versions.
   """
   @spec publish(Config.t(), opts()) ::
-          {:ok, result()} | {:ok, preview()} | {:error, term()}
+          {:ok, result()} | {:ok, preview()} | {:error, error() | term()}
   def publish(%Config{} = config, opts \\ []) do
     if Keyword.get(opts, :dry_run, false) do
       dry_run(config, opts)
