@@ -12,8 +12,10 @@ defmodule Tinfoil.Publish do
   once, after the build matrix finishes, on a single `ubuntu-latest`
   runner.
 
-  Homebrew formula publishing is intentionally out of scope here — the
-  existing `scripts/update-homebrew.sh` still handles that path.
+  Homebrew formula publishing is handled separately by
+  `Tinfoil.Homebrew` -- the generated workflow runs
+  `mix tinfoil.homebrew` in a follow-up job once the GitHub Release
+  exists.
   """
 
   alias Tinfoil.{Archive, Config}
@@ -306,8 +308,12 @@ defmodule Tinfoil.Publish do
     end
   end
 
-  # File.stream!/3 arg order flipped between Elixir 1.15 and 1.16+, so we roll
-  # our own chunked reader rather than branch on version.
+  # Returns a Stream that reads `path` in fixed-size binary chunks. The
+  # whole point is to keep large release tarballs out of memory during
+  # the asset upload PUT — Req hands the stream to Finch, which writes
+  # one chunk at a time. We can't use `File.stream!/3` here because its
+  # arg order changed between Elixir 1.15 and 1.16+; rolling our own
+  # reader is simpler than a version branch.
   defp chunked_stream(path, chunk_bytes) do
     Stream.resource(
       fn -> File.open!(path, [:read, :binary]) end,

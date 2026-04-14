@@ -3,12 +3,14 @@ defmodule Tinfoil.Archive do
   Create release archives from built binaries.
 
   Archive creation is bytes-in, bytes-out: given a binary path and an
-  archive basename, produce a gzipped tarball (containing the binary
-  renamed to its canonical app name) plus a `.sha256` sidecar file in
-  `shasum -a 256` format.
+  archive basename, produce either a gzipped tarball (`tar_gz/4`,
+  used for the unix targets) or a zip file (`zip/4`, used for
+  Windows targets where users expect `.zip`/`.exe`), plus a `.sha256`
+  sidecar in `shasum -a 256` format. The choice of format is driven
+  by the target spec's `archive_ext` and dispatched in `Tinfoil.Build`.
 
-  Uses Erlang's built-in `:erl_tar` and `:crypto` — no shelling out,
-  no extra dependencies.
+  Uses Erlang's built-in `:erl_tar`, `:zip`, and `:crypto` — no
+  shelling out, no extra dependencies.
   """
 
   @doc """

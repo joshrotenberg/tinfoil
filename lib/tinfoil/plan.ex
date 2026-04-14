@@ -9,7 +9,9 @@ defmodule Tinfoil.Plan do
 
   This module is deliberately pure — no filesystem, no network, no
   shelling out — so it is trivial to test and safe to call from any
-  context.
+  context. The companion `mix tinfoil.plan` task layers in side
+  effects on top: pretty-printing for humans, and NIF cross-compile
+  warnings via `Tinfoil.NifCheck`.
   """
 
   alias Tinfoil.{Config, Target}
