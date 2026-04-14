@@ -284,7 +284,7 @@ defmodule Tinfoil.Publish do
     name = Path.basename(path)
     upload_url = String.replace(upload_template, ~r/\{\?.*\}/, "")
     size = File.stat!(path).size
-    body = File.stream!(path, @upload_chunk_bytes)
+    body = chunked_stream(path, @upload_chunk_bytes)
 
     case Req.post(req,
            url: upload_url,
@@ -304,6 +304,21 @@ defmodule Tinfoil.Publish do
       {:error, reason} ->
         {:error, {:upload_error, name, reason}}
     end
+  end
+
+  # File.stream!/3 arg order flipped between Elixir 1.15 and 1.16+, so we roll
+  # our own chunked reader rather than branch on version.
+  defp chunked_stream(path, chunk_bytes) do
+    Stream.resource(
+      fn -> File.open!(path, [:read, :binary]) end,
+      fn io ->
+        case IO.binread(io, chunk_bytes) do
+          :eof -> {:halt, io}
+          data when is_binary(data) -> {[data], io}
+        end
+      end,
+      &File.close/1
+    )
   end
 
   defp content_type(path) do
