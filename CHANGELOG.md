@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.14](https://github.com/joshrotenberg/tinfoil/compare/v0.2.13...v0.2.14) (2026-04-14)
+
+
+### Bug Fixes
+
+* compile templates into the BEAM so archive installs work ([#75](https://github.com/joshrotenberg/tinfoil/issues/75)) ([56f902a](https://github.com/joshrotenberg/tinfoil/commit/56f902a0efc1e34a02dcda5d893b65eb63a14c75))
+
 ## [0.2.13](https://github.com/joshrotenberg/tinfoil/compare/v0.2.12...v0.2.13) (2026-04-14)
 
 
