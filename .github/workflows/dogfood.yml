@@ -1,0 +1,159 @@
+name: Dogfood
+
+# Runs after a hex release to prove the just-shipped version actually
+# works end-to-end from a user's perspective. Catches the kind of
+# packaging regressions we hit in 0.2.13 / 0.2.14 / 0.2.15 (templates
+# missing from the archive, priv/ missing from the hex tarball).
+#
+# Scope today: archive install + scaffolding smoke. Doesn't tag a
+# throwaway release or push to a real tap — those side effects are
+# still done manually against tinfoil_demo after each release. Could
+# be extended later if we want tighter coverage.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "tinfoil version to test (e.g. 0.2.15)"
+        required: true
+
+jobs:
+  archive-install:
+    name: mix archive.install + init --install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.19"
+          otp-version: "28"
+
+      - name: Resolve tinfoil version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            version="${{ inputs.version }}"
+          else
+            # The release event's tag_name is "v0.2.15"; strip the leading v.
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Testing tinfoil $version"
+
+      - name: Wait for hex to serve the version
+        # Hex publish from the release workflow runs in parallel with
+        # this job; give it up to 5 minutes to show up on the index.
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          for i in $(seq 1 30); do
+            if mix hex.info tinfoil "$version" > /dev/null 2>&1; then
+              echo "tinfoil $version available on hex"
+              exit 0
+            fi
+            echo "attempt $i: not yet on hex, waiting 10s..."
+            sleep 10
+          done
+          echo "::error::tinfoil $version never showed up on hex after 5 minutes"
+          exit 1
+
+      - name: Install tinfoil archive
+        run: mix archive.install --force hex tinfoil ${{ steps.version.outputs.version }}
+
+      - name: Scaffold a fresh project
+        run: |
+          mix new scratch_cli
+          cd scratch_cli
+          mix tinfoil.init --install
+
+      - name: Verify scaffolded project compiles cleanly
+        working-directory: scratch_cli
+        run: mix compile --warnings-as-errors
+
+      - name: Verify mix tinfoil.plan works against the scaffold
+        working-directory: scratch_cli
+        run: mix tinfoil.plan
+
+      - name: Verify workflow generation
+        working-directory: scratch_cli
+        run: |
+          mix tinfoil.init
+          test -f .github/workflows/release.yml
+
+      - name: Verify --install is idempotent
+        working-directory: scratch_cli
+        run: |
+          # Snapshot, re-run, compare — second --install must not change anything.
+          sha_before=$(find . -type f -not -path './_build/*' -not -path './deps/*' \
+            | sort | xargs sha256sum | sha256sum | awk '{print $1}')
+          mix tinfoil.init --install
+          sha_after=$(find . -type f -not -path './_build/*' -not -path './deps/*' \
+            | sort | xargs sha256sum | sha256sum | awk '{print $1}')
+          if [ "$sha_before" != "$sha_after" ]; then
+            echo "::error::--install is not idempotent"
+            diff <(echo "$sha_before") <(echo "$sha_after")
+            exit 1
+          fi
+          echo "OK: --install is idempotent"
+
+  tinfoil-demo-smoke:
+    name: tinfoil_demo dry-run smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          repository: joshrotenberg/tinfoil_demo
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.19"
+          otp-version: "28"
+
+      - name: Resolve tinfoil version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            version="${{ inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for hex to serve the version
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          for i in $(seq 1 30); do
+            if mix hex.info tinfoil "$version" > /dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::tinfoil $version never showed up on hex"
+          exit 1
+
+      - name: Point tinfoil_demo at the new tinfoil version
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          # Match the current minor prefix — hex dep is already `~> 0.2`
+          # so no change unless the minor bumps. This is a no-op on patch
+          # releases but makes the job correct for a hypothetical 0.3.
+          minor=$(echo "$version" | cut -d. -f1,2)
+          sed -i "s/{:tinfoil,[[:space:]]*\"~>[[:space:]]*[0-9.]*\"/{:tinfoil, \"~> $minor\"/" mix.exs
+          mix deps.get
+
+      - name: mix compile --warnings-as-errors
+        run: mix compile --warnings-as-errors
+
+      - name: mix test
+        run: mix test
+
+      - name: mix tinfoil.plan renders cleanly
+        run: mix tinfoil.plan
+
+      - name: mix tinfoil.generate succeeds
+        # Not checking for zero-diff here: the generated files carry a
+        # `Generated by tinfoil X.Y.Z` header that legitimately changes
+        # when the tinfoil version changes. We're validating that the
+        # new tinfoil can regenerate a previously-working project's
+        # workflow without raising, not that bytes are identical.
+        run: mix tinfoil.generate
