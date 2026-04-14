@@ -35,6 +35,7 @@ defmodule Tinfoil.Config do
     archive_format: :tar_gz,
     github: %{repo: nil, draft: false},
     homebrew: %{enabled: false, tap: nil, formula_name: nil},
+    scoop: %{enabled: false, bucket: nil, manifest_name: nil},
     installer: %{enabled: false, install_dir: "~/.local/bin"},
     checksums: :sha256,
     prerelease_pattern: nil,
@@ -62,6 +63,7 @@ defmodule Tinfoil.Config do
           archive_format: :tar_gz | :zip,
           github: map(),
           homebrew: map(),
+          scoop: map(),
           installer: map(),
           checksums: :sha256,
           prerelease_pattern: Regex.t(),
@@ -93,6 +95,7 @@ defmodule Tinfoil.Config do
          {:ok, archive_format} <- fetch_archive_format(tinfoil),
          {:ok, prerelease_pattern} <- fetch_prerelease_pattern(tinfoil),
          {:ok, homebrew} <- fetch_homebrew(tinfoil, project),
+         {:ok, scoop} <- fetch_scoop(tinfoil, project),
          {:ok, burrito_targets} <- Burrito.extract_targets(project, app),
          {:ok, burrito_names} <- Burrito.resolve_all(targets, burrito_targets, extra_targets) do
       config = %__MODULE__{
@@ -107,6 +110,7 @@ defmodule Tinfoil.Config do
         archive_format: archive_format,
         github: merge_github(Keyword.get(tinfoil, :github, [])),
         homebrew: homebrew,
+        scoop: scoop,
         installer: merge_installer(Keyword.get(tinfoil, :installer, [])),
         checksums: Keyword.get(tinfoil, :checksums, :sha256),
         prerelease_pattern: prerelease_pattern,
@@ -343,6 +347,60 @@ defmodule Tinfoil.Config do
   defp merge_installer(user) do
     defaults = %{enabled: false, install_dir: "~/.local/bin"}
     Map.merge(defaults, Map.new(user))
+  end
+
+  @valid_scoop_auth [:token, :deploy_key]
+
+  defp fetch_scoop(tinfoil, project) do
+    merged = merge_scoop(Keyword.get(tinfoil, :scoop, []), project)
+
+    cond do
+      not merged.enabled ->
+        {:ok, merged}
+
+      is_nil(merged.bucket) or merged.bucket == "" ->
+        {:error, :scoop_enabled_without_bucket}
+
+      not valid_tap_format?(merged.bucket) ->
+        {:error, {:invalid_scoop_bucket, merged.bucket}}
+
+      not valid_scoop_manifest_name?(merged.manifest_name) ->
+        {:error, {:invalid_scoop_manifest_name, merged.manifest_name}}
+
+      merged.auth not in @valid_scoop_auth ->
+        {:error, {:invalid_scoop_auth, merged.auth}}
+
+      true ->
+        {:ok, merged}
+    end
+  end
+
+  # Scoop manifest names are just filenames -- keep them safe.
+  defp valid_scoop_manifest_name?(name) when is_binary(name) do
+    Regex.match?(~r/^[A-Za-z][A-Za-z0-9_-]*$/, name)
+  end
+
+  defp valid_scoop_manifest_name?(_), do: false
+
+  defp merge_scoop(user, project) do
+    defaults = %{
+      enabled: false,
+      bucket: nil,
+      manifest_name: nil,
+      auth: :token,
+      token_secret: "SCOOP_BUCKET_TOKEN",
+      deploy_key_secret: "SCOOP_BUCKET_DEPLOY_KEY"
+    }
+
+    merged = Map.merge(defaults, Map.new(user))
+
+    manifest_name =
+      merged.manifest_name ||
+        project
+        |> Keyword.fetch!(:app)
+        |> to_string()
+
+    %{merged | manifest_name: manifest_name}
   end
 
   defp merge_ci(user, project) do
@@ -587,6 +645,26 @@ defmodule Tinfoil.Config do
   defp format_error({:invalid_prerelease_pattern, value}),
     do:
       ":tinfoil :prerelease_pattern must be a Regex (e.g. ~r/-(rc|beta)/), got: #{inspect(value)}"
+
+  defp format_error(:scoop_enabled_without_bucket),
+    do:
+      ":tinfoil :scoop is enabled but :bucket is missing or empty. " <>
+        "Set `scoop: [enabled: true, bucket: \"owner/scoop-bucket\"]` or disable scoop."
+
+  defp format_error({:invalid_scoop_bucket, bucket}),
+    do:
+      ":tinfoil :scoop :bucket #{inspect(bucket)} is not valid. " <>
+        "Expected \"owner/repo\" format (e.g. \"owner/scoop-bucket\")."
+
+  defp format_error({:invalid_scoop_manifest_name, name}),
+    do:
+      ":tinfoil :scoop :manifest_name #{inspect(name)} is not a valid Scoop manifest name. " <>
+        "Use letters, digits, hyphens, and underscores starting with a letter."
+
+  defp format_error({:invalid_scoop_auth, auth}),
+    do:
+      ":tinfoil :scoop :auth #{inspect(auth)} is not supported. " <>
+        "Valid values: #{inspect(@valid_scoop_auth)}."
 
   defp format_error({:invalid_extra_artifacts, v}),
     do:

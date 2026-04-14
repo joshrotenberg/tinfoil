@@ -26,6 +26,7 @@ defmodule Tinfoil.Generator do
   @external_resource Path.join(@templates_dir, "formula.rb.eex")
   @external_resource Path.join(@templates_dir, "install.sh.eex")
   @external_resource Path.join(@templates_dir, "install.ps1.eex")
+  @external_resource Path.join(@templates_dir, "scoop.json.eex")
   @external_resource Path.join(@templates_dir, "application.ex.eex")
   @external_resource Path.join(@templates_dir, "cli.ex.eex")
 
@@ -56,6 +57,10 @@ defmodule Tinfoil.Generator do
       :assigns
     ]
   )
+
+  EEx.function_from_file(:defp, :render_scoop_json, Path.join(@templates_dir, "scoop.json.eex"), [
+    :assigns
+  ])
 
   EEx.function_from_file(
     :defp,
@@ -174,6 +179,7 @@ defmodule Tinfoil.Generator do
       ci: config.ci,
       github: config.github,
       homebrew: config.homebrew,
+      scoop: config.scoop,
       attestations: config.attestations
     ]
 
@@ -231,6 +237,10 @@ defmodule Tinfoil.Generator do
 
     render_install_ps1(assigns)
   end
+
+  @doc false
+  @spec render_scoop(keyword()) :: String.t()
+  def render_scoop(assigns), do: render_scoop_json(assigns)
 
   @doc """
   Render the `lib/<app>/application.ex` boilerplate used by

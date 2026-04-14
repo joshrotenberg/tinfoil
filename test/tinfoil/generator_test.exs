@@ -142,6 +142,25 @@ defmodule Tinfoil.GeneratorTest do
       refute yaml =~ "webfactory/ssh-agent"
     end
 
+    test "workflow includes a scoop job when scoop is enabled" do
+      yaml =
+        build_config(
+          scoop: [enabled: true, bucket: "owner/scoop-bucket", manifest_name: "my_cli"]
+        )
+        |> Generator.render_workflow()
+
+      assert yaml =~ "scoop:"
+      assert yaml =~ "SCOOP_BUCKET_TOKEN"
+      assert yaml =~ "mix tinfoil.scoop --input-dir artifacts"
+    end
+
+    test "workflow omits scoop job when scoop is disabled" do
+      yaml = build_config() |> Generator.render_workflow()
+
+      refute yaml =~ "Update Scoop bucket"
+      refute yaml =~ "SCOOP_BUCKET_TOKEN"
+    end
+
     test "workflow uses deploy key auth when configured" do
       yaml =
         build_config(homebrew: [enabled: true, tap: "owner/homebrew-tap", auth: :deploy_key])

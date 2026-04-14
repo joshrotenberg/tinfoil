@@ -145,3 +145,38 @@ jobs:
           HOMEBREW_TAP_TOKEN: ${{ secrets.<%= @homebrew.token_secret %> }}<% end %>
         run: mix tinfoil.homebrew --input-dir artifacts
 <% end %>
+<%= if @scoop.enabled do %>
+  scoop:
+    name: Update Scoop bucket
+    needs: release
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.ref_name, '-rc') && !contains(github.ref_name, '-beta') && !contains(github.ref_name, '-alpha') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Elixir/OTP
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "<%= @ci.elixir_version %>"
+          otp-version: "<%= @ci.otp_version %>"
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+<%= if @scoop.auth == :deploy_key do %>
+      - name: Set up SSH deploy key
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: ${{ secrets.<%= @scoop.deploy_key_secret %> }}
+<% end %>
+      - name: Update Scoop manifest<%= if @scoop.auth == :token do %>
+        env:
+          SCOOP_BUCKET_TOKEN: ${{ secrets.<%= @scoop.token_secret %> }}<% end %>
+        run: mix tinfoil.scoop --input-dir artifacts
+<% end %>

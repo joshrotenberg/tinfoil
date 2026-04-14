@@ -27,6 +27,9 @@ One `git tag v1.0.0 && git push --tags` produces:
   (via Linuxbrew, no extra config) — tinfoil renders `Formula/yourcli.rb`
   with real URLs + SHAs and commits it, under either a PAT or an
   SSH deploy key.
+- **A Scoop manifest** (optional, Windows) pushed to a bucket repo
+  so `scoop install you/bucket/yourcli` just works. Same auth model
+  as Homebrew.
 - **Optional extras bundled with every binary.** `extra_artifacts:`
   config ships your LICENSE, man pages, shell completions, or
   whatever else alongside the binary at configurable destinations
@@ -345,6 +348,36 @@ separate config needed. Linux users can run
 `brew install owner/tap/myapp` the same way macOS users do, and
 they'll pull the matching `linux_x86_64` or `linux_arm64` tarball.
 
+### Scoop (Windows)
+
+Symmetric counterpart to Homebrew for Windows users. When
+`scoop: [enabled: true]` and you have `:windows_x86_64` in
+`:targets`, every release pushes a Scoop manifest to the
+configured bucket repo:
+
+```elixir
+scoop: [
+  enabled: true,
+  bucket: "owner/scoop-bucket",
+  auth: :token  # or :deploy_key
+]
+```
+
+Create the bucket repo on GitHub (any name works, but the
+convention is `scoop-<something>`), grant push access via a PAT
+named `SCOOP_BUCKET_TOKEN` or an SSH deploy key named
+`SCOOP_BUCKET_DEPLOY_KEY`, and downstream users install with:
+
+```sh
+scoop bucket add owner https://github.com/owner/scoop-bucket
+scoop install owner/my_cli
+```
+
+The rendered manifest includes a `checkver` + `autoupdate` block
+so Scoop bucket maintainers (or automated bots) can pick up new
+versions without tinfoil re-pushing. If you don't want that, edit
+the manifest in the bucket after push.
+
 ### Runtime output from the wrapped binary
 
 A Burrito-wrapped binary prints a handful of diagnostic lines to
@@ -404,6 +437,15 @@ tinfoil: [
     tap: "owner/homebrew-tap",
     formula_name: "my_cli", # defaults to the app name
     auth: :token            # or :deploy_key (default :token)
+  ],
+
+  # Scoop manifest generation (Windows). Same auth model as Homebrew.
+  # Requires :windows_x86_64 in :targets.
+  scoop: [
+    enabled: true,
+    bucket: "owner/scoop-bucket",
+    manifest_name: "my_cli", # defaults to the app name
+    auth: :token             # or :deploy_key (default :token)
   ],
 
   # Shell installer script.

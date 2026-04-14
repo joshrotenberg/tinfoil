@@ -1,0 +1,108 @@
+name: Scoop manifest smoke
+
+# Renders a Scoop manifest via `Tinfoil.Generator.render_scoop/1`
+# against tinfoil_demo's v0.7.2 release, writes it into a local
+# directory, uses that directory as a Scoop bucket, and runs
+# `scoop install` to prove the manifest actually works end-to-end.
+# No real bucket repo required.
+
+on:
+  pull_request:
+    paths:
+      - "priv/templates/scoop.json.eex"
+      - "lib/tinfoil/scoop.ex"
+      - "lib/tinfoil/generator.ex"
+      - ".github/workflows/scoop.yml"
+  push:
+    branches: [main]
+    paths:
+      - "priv/templates/scoop.json.eex"
+      - "lib/tinfoil/scoop.ex"
+      - "lib/tinfoil/generator.ex"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: scoop install from a rendered manifest
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.19"
+          otp-version: "28"
+
+      - name: mix deps.get
+        run: mix deps.get
+
+      - name: Write render-helper script
+        shell: pwsh
+        run: |
+          @'
+          # Render a manifest for tinfoil_demo v0.7.2's actual windows asset
+          # and its real published sha256.
+          archive = "tinfoil_demo-0.7.2-x86_64-pc-windows-msvc.zip"
+          url = "https://github.com/joshrotenberg/tinfoil_demo/releases/download/v0.7.2/checksums-sha256.txt"
+          sums = Req.get!(url: url).body
+
+          sha =
+            sums
+            |> String.split("\n")
+            |> Enum.find_value(fn line ->
+              case String.split(line, ~r/\s+/, parts: 2) do
+                [sha, name] -> if String.trim(name) == archive, do: sha
+                _ -> nil
+              end
+            end)
+
+          unless sha, do: raise "no sha for " <> archive
+
+          assigns = [
+            app: :tinfoil_demo,
+            version: "0.7.2",
+            description: "Tinfoil demo CLI",
+            homepage: "https://github.com/joshrotenberg/tinfoil_demo",
+            license: "MIT",
+            base_url: "https://github.com/joshrotenberg/tinfoil_demo/releases",
+            sha_windows_x86_64: sha
+          ]
+
+          File.mkdir_p!("bucket")
+          File.write!("bucket/tinfoil_demo.json", Tinfoil.Generator.render_scoop(assigns))
+          IO.puts("wrote bucket/tinfoil_demo.json")
+          '@ | Out-File -Encoding utf8 render_scoop.exs
+
+      - name: Render manifest
+        shell: pwsh
+        run: |
+          mix run render_scoop.exs
+          if (-not (Test-Path "bucket\tinfoil_demo.json")) {
+            throw "bucket\tinfoil_demo.json was not rendered"
+          }
+          Get-Content bucket\tinfoil_demo.json
+
+      - name: Install Scoop
+        shell: pwsh
+        run: |
+          Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+          Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
+
+      - name: Add the local bucket and install
+        shell: pwsh
+        run: |
+          # Scoop accepts a local path as a bucket; point it at ./bucket.
+          $bucketPath = (Resolve-Path "bucket").Path
+          scoop bucket add tinfoil-local $bucketPath
+          scoop install tinfoil-local/tinfoil_demo
+
+      - name: Run the installed binary
+        shell: pwsh
+        run: |
+          $out = (scoop which tinfoil_demo)
+          Write-Host "resolved to: $out"
+          $result = (& tinfoil_demo info) -join "`n"
+          Write-Host $result
+          if ($result -notmatch "tinfoil_demo") {
+            throw "installed binary did not emit expected output; got: $result"
+          }
