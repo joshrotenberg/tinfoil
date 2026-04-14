@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.13](https://github.com/joshrotenberg/tinfoil/compare/v0.2.12...v0.2.13) (2026-04-14)
+
+
+### Bug Fixes
+
+* ship EEx templates from priv/ so archive installs work ([#73](https://github.com/joshrotenberg/tinfoil/issues/73)) ([5f52fbe](https://github.com/joshrotenberg/tinfoil/commit/5f52fbe0cc33bf4b5c77da3e3302808201083fc9))
+
 ## [0.2.12](https://github.com/joshrotenberg/tinfoil/compare/v0.2.11...v0.2.12) (2026-04-14)
 
 
