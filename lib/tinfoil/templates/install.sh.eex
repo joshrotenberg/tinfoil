@@ -84,7 +84,7 @@ case "$TAG" in v*) ;; *) TAG="v$TAG" ;; esac
 ARCHIVE="${APP}-${VERSION_NO_V}-${TRIPLE}.tar.gz"
 BASE="https://github.com/${REPO}/releases/download/${TAG}"
 URL="${BASE}/${ARCHIVE}"
-SUM_URL="${URL}.sha256"
+SUMS_URL="${BASE}/checksums-sha256.txt"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -92,9 +92,17 @@ trap 'rm -rf "$TMP"' EXIT
 echo "Downloading ${ARCHIVE}..."
 fetch "$URL" "$TMP/$ARCHIVE" || die "download failed: $URL"
 
+# Verify against the combined checksums-sha256.txt that tinfoil
+# uploads alongside the archives. Per-archive .sha256 sidecars are
+# not published as release assets to keep the release page tidy.
 echo "Verifying checksum..."
-if fetch "$SUM_URL" "$TMP/$ARCHIVE.sha256" 2>/dev/null; then
-  EXPECTED="$(awk '{print $1}' "$TMP/$ARCHIVE.sha256")"
+if fetch "$SUMS_URL" "$TMP/checksums-sha256.txt" 2>/dev/null; then
+  EXPECTED="$(awk -v a="$ARCHIVE" '$2 == a || $2 == "*" a {print $1; exit}' "$TMP/checksums-sha256.txt")"
+
+  if [ -z "$EXPECTED" ]; then
+    die "no checksum entry for ${ARCHIVE} in checksums-sha256.txt"
+  fi
+
   if command -v shasum >/dev/null 2>&1; then
     ACTUAL="$(shasum -a 256 "$TMP/$ARCHIVE" | awk '{print $1}')"
   elif command -v sha256sum >/dev/null 2>&1; then
@@ -105,7 +113,7 @@ if fetch "$SUM_URL" "$TMP/$ARCHIVE.sha256" 2>/dev/null; then
   [ "$EXPECTED" = "$ACTUAL" ] || die "checksum mismatch (expected $EXPECTED, got $ACTUAL)"
   echo "Checksum OK."
 else
-  echo "warning: no checksum file found; skipping verification" >&2
+  echo "warning: checksums-sha256.txt not found; skipping verification" >&2
 fi
 
 echo "Extracting..."
