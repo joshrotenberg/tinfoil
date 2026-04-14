@@ -366,6 +366,7 @@ defmodule Tinfoil.Config do
   end
 
   @doc false
+  @spec infer_github_repo() :: String.t() | nil
   def infer_github_repo do
     case System.cmd("git", ["remote", "get-url", "origin"], stderr_to_stdout: true) do
       {output, 0} ->

@@ -44,6 +44,7 @@ defmodule Tinfoil.Homebrew do
           tag: String.t() | nil,
           formula_template: Path.t() | nil,
           tap_dir: Path.t() | nil,
+          dry_run: boolean() | nil,
           git: module()
         ]
 
@@ -51,6 +52,16 @@ defmodule Tinfoil.Homebrew do
           pushed: boolean(),
           formula_path: Path.t(),
           commit_sha: String.t() | nil
+        }
+
+  @type preview :: %{
+          dry_run: true,
+          tap: String.t(),
+          auth: :token | :deploy_key,
+          clone_url: String.t(),
+          formula_name: String.t(),
+          formula: String.t(),
+          commit_message: String.t()
         }
 
   @doc """
@@ -68,13 +79,22 @@ defmodule Tinfoil.Homebrew do
     * `:git`              — module implementing the `git` callbacks
       (see `Tinfoil.Homebrew.Git`); injected for testing
   """
-  @spec publish(Config.t(), opts()) :: {:ok, result()} | {:error, term()}
+  @spec publish(Config.t(), opts()) ::
+          {:ok, result()} | {:ok, preview()} | {:error, term()}
   def publish(config, opts \\ [])
 
   def publish(%Config{homebrew: %{enabled: false}}, _opts),
     do: {:error, :homebrew_not_enabled}
 
   def publish(%Config{} = config, opts) do
+    if Keyword.get(opts, :dry_run, false) do
+      dry_run(config, opts)
+    else
+      do_publish(config, opts)
+    end
+  end
+
+  defp do_publish(config, opts) do
     git = Keyword.get(opts, :git, Tinfoil.Homebrew.Git)
     input_dir = Keyword.get(opts, :input_dir, "artifacts")
     template_path = Keyword.get(opts, :formula_template, ".tinfoil/formula.rb.eex")
@@ -94,6 +114,44 @@ defmodule Tinfoil.Homebrew do
       {:ok, %{pushed: commit_sha != nil, formula_path: formula_path, commit_sha: commit_sha}}
     end
   end
+
+  # Render everything real `publish/2` would send, without cloning,
+  # committing, or pushing. Still reads the artifacts + template from
+  # disk because that's how we know the rendered formula is valid.
+  # The clone URL redacts any token baked into the auth URL.
+  defp dry_run(config, opts) do
+    input_dir = Keyword.get(opts, :input_dir, "artifacts")
+    template_path = Keyword.get(opts, :formula_template, ".tinfoil/formula.rb.eex")
+
+    with {:ok, tag} <- fetch_tag(opts),
+         version = String.trim_leading(tag, "v"),
+         {:ok, shas} <- collect_shas(input_dir, config),
+         {:ok, template} <- read_template(template_path),
+         {:ok, formula} <- render_formula(template, version, shas),
+         {:ok, clone_url} <- build_clone_url(config.homebrew) do
+      {:ok,
+       %{
+         dry_run: true,
+         tap: config.homebrew.tap,
+         auth: config.homebrew.auth,
+         clone_url: redact_url(clone_url),
+         formula_name: "#{config.homebrew.formula_name}.rb",
+         formula: formula,
+         commit_message: "#{config.app} #{version}"
+       }}
+    end
+  end
+
+  # Strip a token baked into an HTTPS clone URL before showing it back
+  # to the user. `git@` URLs don't carry secrets so they pass through.
+  defp redact_url("https://x-access-token:" <> rest) do
+    case String.split(rest, "@", parts: 2) do
+      [_token, tail] -> "https://x-access-token:****@" <> tail
+      _ -> "https://x-access-token:****"
+    end
+  end
+
+  defp redact_url(url), do: url
 
   ## ───────────────────── internals ─────────────────────
 

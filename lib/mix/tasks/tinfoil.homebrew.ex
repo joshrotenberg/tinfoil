@@ -22,6 +22,9 @@ defmodule Mix.Tasks.Tinfoil.Homebrew do
     * `--input-dir DIR`  — directory containing release tarballs and
       `.sha256` sidecars (default `"artifacts"`)
     * `--tag VALUE`      — override `GITHUB_REF_NAME`
+    * `--dry-run`        — render the formula and print what would be
+      pushed (tap, clone URL with tokens redacted, commit message,
+      full formula contents) without touching the tap repo
   """
 
   use Mix.Task
@@ -32,7 +35,7 @@ defmodule Mix.Tasks.Tinfoil.Homebrew do
   def run(argv) do
     {opts, _, _} =
       OptionParser.parse(argv,
-        switches: [input_dir: :string, tag: :string],
+        switches: [input_dir: :string, tag: :string, dry_run: :boolean],
         aliases: [i: :input_dir]
       )
 
@@ -47,6 +50,9 @@ defmodule Mix.Tasks.Tinfoil.Homebrew do
     end
 
     case Homebrew.publish(config, Keyword.new(opts)) do
+      {:ok, %{dry_run: true} = preview} ->
+        report_preview(preview)
+
       {:ok, %{pushed: false}} ->
         Mix.shell().info("formula unchanged; nothing to push")
 
@@ -62,5 +68,17 @@ defmodule Mix.Tasks.Tinfoil.Homebrew do
       {:error, reason} ->
         Mix.raise("homebrew publish failed: #{inspect(reason)}")
     end
+  end
+
+  defp report_preview(preview) do
+    Mix.shell().info([:cyan, "tinfoil homebrew (dry-run)\n", :reset])
+    Mix.shell().info("  tap:            #{preview.tap}")
+    Mix.shell().info("  auth:           #{preview.auth}")
+    Mix.shell().info("  clone url:      #{preview.clone_url}")
+    Mix.shell().info("  formula name:   #{preview.formula_name}")
+    Mix.shell().info("  commit message: #{preview.commit_message}")
+    Mix.shell().info("\n  formula:")
+    preview.formula |> String.split("\n") |> Enum.each(&Mix.shell().info("    " <> &1))
+    Mix.shell().info("\n  no git clone, commit, or push performed")
   end
 end

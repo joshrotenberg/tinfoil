@@ -420,6 +420,39 @@ defmodule Tinfoil.PublishTest do
     Plug.Conn.resp(conn, 404, "not found")
   end
 
+  describe "publish/2 dry-run" do
+    @tag :tmp_dir
+    test "returns a preview without touching GitHub", %{tmp_dir: tmp} do
+      input = Path.join(tmp, "artifacts")
+      File.mkdir_p!(input)
+
+      File.write!(Path.join(input, "my_cli-1.2.3-aarch64-apple-darwin.tar.gz"), "arm64")
+
+      File.write!(
+        Path.join(input, "my_cli-1.2.3-aarch64-apple-darwin.tar.gz.sha256"),
+        "aaa  my_cli-1.2.3-aarch64-apple-darwin.tar.gz\n"
+      )
+
+      # Purposely omit `:req` — dry-run should never build one.
+      {:ok, preview} =
+        Publish.publish(build_config(),
+          input_dir: input,
+          tag: "v1.2.3",
+          dry_run: true
+        )
+
+      assert preview.dry_run == true
+      assert preview.repo == "owner/my_cli"
+      assert preview.tag == "v1.2.3"
+      assert preview.prerelease == false
+      assert preview.draft == false
+
+      assert Enum.any?(preview.assets, fn a ->
+               a.name == "my_cli-1.2.3-aarch64-apple-darwin.tar.gz"
+             end)
+    end
+  end
+
   describe "prerelease?/2" do
     @default_pattern ~r/-(rc|beta|alpha)(\.|$)/
 
