@@ -18,9 +18,10 @@ One `git tag v1.0.0 && git push --tags` produces:
 - **A GitHub Release** with every archive attached, a combined
   `checksums-sha256.txt`, and release notes auto-generated from
   your commits.
-- **A `curl | sh` installer** (optional) at `scripts/install.sh`
-  that picks the right tarball for the user's OS/arch and verifies
-  the sha256 before installing.
+- **A `curl | sh` installer** (optional) at `scripts/install.sh` and
+  a PowerShell equivalent at `scripts/install.ps1`. Both pick the
+  right asset for the user's OS/arch and verify the sha256 before
+  installing.
 - **An updated Homebrew formula** (optional) pushed to your tap so
   `brew install you/tap/yourcli` just works — tinfoil renders
   `Formula/yourcli.rb` with real URLs + SHAs and commits it, under
@@ -158,7 +159,8 @@ your-project/
 ├── .github/workflows/release.yml    ← CI pipeline (always)
 ├── .tinfoil/formula.rb.eex          ← if homebrew enabled
 ├── scripts/
-│   └── install.sh                   ← if installer enabled
+│   ├── install.sh                   ← if installer enabled (Unix)
+│   └── install.ps1                  ← if installer enabled (Windows)
 └── mix.exs
 ```
 
@@ -277,8 +279,12 @@ GitHub's ARM runner is only on paid plans -- free-tier users were
 previously stuck on a queued job forever. Paid users who want a
 native arm64 build can flip the runner back via `:extra_targets`.
 
-The generated installer script targets Unix shells only; a PowerShell
-installer for Windows users is future work.
+Two installer scripts ship when `installer.enabled: true`:
+`scripts/install.sh` for Unix (`curl | sh`) and `scripts/install.ps1`
+for Windows (`iex (irm ...)`). Both resolve the latest release tag
+from the GitHub API, download the right asset for the detected
+OS/arch, verify against the combined `checksums-sha256.txt`, and
+install to a sensible default directory (configurable via flags).
 
 ### Collapsing the build matrix
 

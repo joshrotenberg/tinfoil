@@ -1,0 +1,96 @@
+name: Windows installer smoke
+
+# Renders `scripts/install.ps1` for a tinfoil_demo-flavored config and
+# actually runs it on windows-latest. Downloads the real .zip from
+# tinfoil_demo's v0.7.2 GitHub release, verifies the checksum, extracts
+# the .exe, and runs it. Catches any regression in the PowerShell
+# script's shape (checksum parsing, path expansion, extraction) on the
+# platform that runs it for real.
+
+on:
+  pull_request:
+    paths:
+      - "priv/templates/install.ps1.eex"
+      - "lib/tinfoil/generator.ex"
+      - ".github/workflows/windows-installer.yml"
+  push:
+    branches: [main]
+    paths:
+      - "priv/templates/install.ps1.eex"
+      - "lib/tinfoil/generator.ex"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: install.ps1 against tinfoil_demo
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.19"
+          otp-version: "28"
+
+      - name: mix deps.get
+        run: mix deps.get
+
+      - name: Write render-helper script
+        # Heredocs passed through `-e` get their newlines squashed by
+        # PowerShell arg handling on Windows. Write the Elixir to a file
+        # and invoke via `mix run <file>` instead.
+        shell: pwsh
+        run: |
+          @'
+          project = [
+            app: :tinfoil_demo,
+            version: "0.7.2",
+            package: [licenses: ["MIT"]],
+            releases: [
+              tinfoil_demo: [
+                burrito: [
+                  targets: [
+                    windows_x86_64: [os: :windows, cpu: :x86_64]
+                  ]
+                ]
+              ]
+            ],
+            tinfoil: [
+              targets: [:windows_x86_64],
+              installer: [enabled: true]
+            ]
+          ]
+
+          {:ok, config} = Tinfoil.Config.load(project)
+          config = %{config | github: %{config.github | repo: "joshrotenberg/tinfoil_demo"}}
+          File.write!("install.ps1", Tinfoil.Generator.render_installer_powershell(config))
+          IO.puts("wrote install.ps1")
+          '@ | Out-File -Encoding utf8 render_install_ps1.exs
+
+      - name: Render install.ps1 for tinfoil_demo
+        shell: pwsh
+        run: |
+          mix run --no-start render_install_ps1.exs
+          if (-not (Test-Path "install.ps1")) { throw "install.ps1 was not written" }
+
+      - name: Run install.ps1 against v0.7.2
+        shell: pwsh
+        run: |
+          .\install.ps1 -Version v0.7.2 -InstallDir "$PWD\bin"
+          if (-not (Test-Path ".\bin\tinfoil_demo.exe")) {
+            throw "tinfoil_demo.exe was not installed"
+          }
+
+      - name: Run the installed binary
+        shell: pwsh
+        run: |
+          # `& ...` captures stdout as a string array (one element per
+          # line). `-notmatch` against an array returns the non-matching
+          # elements, which is truthy whenever ANY line doesn't match.
+          # Join into a single string before testing so the assertion is
+          # actually a boolean.
+          $out = (& ".\bin\tinfoil_demo.exe" info) -join "`n"
+          Write-Host $out
+          if ($out -notmatch "tinfoil_demo") {
+            throw "installed binary did not emit expected output; got: $out"
+          }
