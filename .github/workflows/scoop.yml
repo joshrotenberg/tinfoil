@@ -93,13 +93,15 @@ jobs:
           # $GITHUB_PATH for subsequent steps.
           "$env:USERPROFILE\scoop\shims" | Out-File -Encoding utf8 -Append $env:GITHUB_PATH
 
-      - name: Add the local bucket and install
+      - name: Install from the rendered manifest
         shell: pwsh
         run: |
-          # Scoop accepts a local path as a bucket; point it at ./bucket.
-          $bucketPath = (Resolve-Path "bucket").Path
-          scoop bucket add tinfoil-local $bucketPath
-          scoop install tinfoil-local/tinfoil_demo
+          # Current Scoop requires bucket URLs (no bare local paths), but
+          # `scoop install` accepts a direct manifest file. That still
+          # exercises the whole install flow: URL resolution, hash
+          # verification, extract, shim creation.
+          $manifestPath = (Resolve-Path "bucket\tinfoil_demo.json").Path
+          scoop install $manifestPath
 
       - name: Run the installed binary
         shell: pwsh
