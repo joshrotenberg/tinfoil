@@ -85,6 +85,23 @@ defmodule Tinfoil.GeneratorTest do
       assert yaml =~ "ubuntu-latest"
     end
 
+    test "workflow includes attestations step + permissions by default" do
+      yaml = build_config() |> Generator.render_workflow()
+
+      assert yaml =~ "id-token: write"
+      assert yaml =~ "attestations: write"
+      assert yaml =~ "actions/attest-build-provenance@v2"
+      assert yaml =~ "subject-path: _tinfoil/*.tar.gz, _tinfoil/*.zip"
+    end
+
+    test "attestations: false removes the step + the write permissions" do
+      yaml = build_config(attestations: false) |> Generator.render_workflow()
+
+      refute yaml =~ "id-token: write"
+      refute yaml =~ "attestations: write"
+      refute yaml =~ "attest-build-provenance"
+    end
+
     test "workflow collapses targets per os family when single_runner_per_os" do
       yaml =
         build_config(single_runner_per_os: true)

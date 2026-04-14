@@ -173,7 +173,8 @@ defmodule Tinfoil.Generator do
       build_entries: Tinfoil.Plan.build_entries(plan),
       ci: config.ci,
       github: config.github,
-      homebrew: config.homebrew
+      homebrew: config.homebrew,
+      attestations: config.attestations
     ]
 
     render_release_yml(assigns)
