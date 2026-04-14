@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.17](https://github.com/joshrotenberg/tinfoil/compare/v0.2.16...v0.2.17) (2026-04-14)
+
+
+### Features
+
+* PowerShell installer for Windows users ([#85](https://github.com/joshrotenberg/tinfoil/issues/85)) ([3103846](https://github.com/joshrotenberg/tinfoil/commit/3103846c3440b1429c72722a6a002bd6a42f43b4))
+
 ## [0.2.16](https://github.com/joshrotenberg/tinfoil/compare/v0.2.15...v0.2.16) (2026-04-14)
 
 
