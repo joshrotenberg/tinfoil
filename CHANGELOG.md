@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.6](https://github.com/joshrotenberg/tinfoil/compare/v0.2.5...v0.2.6) (2026-04-14)
+
+
+### Bug Fixes
+
+* per-target archive extension (windows always zip) ([#44](https://github.com/joshrotenberg/tinfoil/issues/44)) ([0903011](https://github.com/joshrotenberg/tinfoil/commit/09030114c4c9201438d51f1a59f340956d8e959d))
+
 ## [0.2.5](https://github.com/joshrotenberg/tinfoil/compare/v0.2.4...v0.2.5) (2026-04-14)
 
 
