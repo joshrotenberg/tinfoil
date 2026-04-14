@@ -40,7 +40,7 @@ defmodule Mix.Tasks.Tinfoil.Init do
       opts[:print] ->
         print_snippet(project)
 
-      opts[:install] and not has_tinfoil_config?(project) ->
+      Keyword.get(opts, :install, false) and not has_tinfoil_config?(project) ->
         install_into_mix_exs()
 
       not has_tinfoil_config?(project) ->
