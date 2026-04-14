@@ -245,7 +245,7 @@ defmodule Tinfoil.Publish do
       tag_name: tag,
       name: tag,
       draft: Keyword.get(opts, :draft, config.github[:draft] || false),
-      prerelease: prerelease?(tag),
+      prerelease: prerelease?(tag, config.prerelease_pattern),
       generate_release_notes: true
     }
 
@@ -331,8 +331,8 @@ defmodule Tinfoil.Publish do
   end
 
   @doc false
-  def prerelease?(tag) do
-    tag =~ ~r/-(rc|beta|alpha)(\.|$)/
+  def prerelease?(tag, %Regex{} = pattern) do
+    tag =~ pattern
   end
 
   defp tinfoil_version do

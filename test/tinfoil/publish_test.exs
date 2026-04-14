@@ -420,16 +420,25 @@ defmodule Tinfoil.PublishTest do
     Plug.Conn.resp(conn, 404, "not found")
   end
 
-  describe "prerelease?/1" do
-    test "matches common prerelease tags" do
-      assert Publish.prerelease?("v1.0.0-rc.1")
-      assert Publish.prerelease?("v0.5-beta")
-      assert Publish.prerelease?("1.2.3-alpha")
+  describe "prerelease?/2" do
+    @default_pattern ~r/-(rc|beta|alpha)(\.|$)/
+
+    test "matches common prerelease tags with the default pattern" do
+      assert Publish.prerelease?("v1.0.0-rc.1", @default_pattern)
+      assert Publish.prerelease?("v0.5-beta", @default_pattern)
+      assert Publish.prerelease?("1.2.3-alpha", @default_pattern)
     end
 
     test "does not match stable tags" do
-      refute Publish.prerelease?("v1.0.0")
-      refute Publish.prerelease?("1.2.3")
+      refute Publish.prerelease?("v1.0.0", @default_pattern)
+      refute Publish.prerelease?("1.2.3", @default_pattern)
+    end
+
+    test "honors a custom pattern" do
+      custom = ~r/-(dev|nightly)(\.|$)/
+      assert Publish.prerelease?("v1.0.0-dev", custom)
+      assert Publish.prerelease?("v1.0.0-nightly.5", custom)
+      refute Publish.prerelease?("v1.0.0-rc.1", custom)
     end
   end
 end

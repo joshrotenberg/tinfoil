@@ -46,6 +46,74 @@ defmodule Tinfoil.ConfigTest do
       assert config.ci.elixir_version == "1.19"
       assert config.ci.otp_version == to_string(System.otp_release())
       assert config.ci.zig_version == "0.15.2"
+      assert Regex.regex?(config.prerelease_pattern)
+      assert "v1.0.0-rc.1" =~ config.prerelease_pattern
+      refute "v1.0.0" =~ config.prerelease_pattern
+    end
+
+    test "accepts a custom :prerelease_pattern regex" do
+      pattern = ~r/-(dev|snapshot)(\.|$)/
+
+      {:ok, config} =
+        Config.load(
+          base_project(
+            targets: [:darwin_arm64, :linux_x86_64],
+            prerelease_pattern: pattern
+          )
+        )
+
+      assert config.prerelease_pattern == pattern
+      assert "v1.0.0-snapshot" =~ config.prerelease_pattern
+      refute "v1.0.0-rc.1" =~ config.prerelease_pattern
+    end
+
+    test "accepts user-defined :extra_targets end-to-end" do
+      extra = %{
+        linux_riscv64: %{
+          runner: "ubuntu-latest",
+          burrito_os: :linux,
+          burrito_cpu: :riscv64,
+          triple: "riscv64-unknown-linux-musl",
+          archive_ext: ".tar.gz",
+          os_family: :linux
+        }
+      }
+
+      releases = [
+        my_cli: [
+          burrito: [
+            targets: [
+              linux_riscv64: [os: :linux, cpu: :riscv64],
+              darwin_arm64: [os: :darwin, cpu: :aarch64]
+            ]
+          ]
+        ]
+      ]
+
+      {:ok, config} =
+        Config.load(
+          base_project(
+            [
+              targets: [:darwin_arm64, :linux_riscv64],
+              extra_targets: extra
+            ],
+            releases: releases
+          )
+        )
+
+      assert config.extra_targets == extra
+      assert config.burrito_names[:linux_riscv64] == :linux_riscv64
+      assert Config.archive_filename(config, :linux_riscv64) =~ "riscv64-unknown-linux-musl"
+    end
+
+    test "rejects non-regex :prerelease_pattern" do
+      assert {:error, {:invalid_prerelease_pattern, "not-a-regex"}} =
+               Config.load(
+                 base_project(
+                   targets: [:darwin_arm64, :linux_x86_64],
+                   prerelease_pattern: "not-a-regex"
+                 )
+               )
     end
 
     test "infers ci.elixir_version from the project's :elixir requirement" do
@@ -145,7 +213,7 @@ defmodule Tinfoil.ConfigTest do
         my_cli: [burrito: [targets: [linux: [os: :linux, cpu: :x86_64]]]]
       ]
 
-      assert {:error, {:no_matching_burrito_target, :darwin_arm64}} =
+      assert {:error, {:no_matching_burrito_target, :darwin_arm64, _}} =
                Config.load(
                  base_project(
                    [targets: [:darwin_arm64, :linux_x86_64]],
