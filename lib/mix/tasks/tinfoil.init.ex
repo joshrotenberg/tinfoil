@@ -40,7 +40,10 @@ defmodule Mix.Tasks.Tinfoil.Init do
       opts[:print] ->
         print_snippet(project)
 
-      Keyword.get(opts, :install, false) and not has_tinfoil_config?(project) ->
+      Keyword.get(opts, :install, false) ->
+        # Every splicer is idempotent, so --install is safe to run on a
+        # project that already has some of the pieces in place. Lets users
+        # fill in missing Burrito wiring without stripping config first.
         install_into_mix_exs()
 
       not has_tinfoil_config?(project) ->
