@@ -200,6 +200,17 @@ users expect to see in release asset names.
 
 Windows support is deferred until Burrito's Windows story stabilizes.
 
+### NIFs and cross-compilation
+
+Burrito cross-compiles via Zig, which handles pure Erlang/Elixir deps
+reliably but can struggle with NIFs (Rustler crates, `elixir_make` C
+extensions, raw `c_src/` sources). `mix tinfoil.plan` inspects your
+resolved deps and prints a warning for anything that looks like a NIF
+so you know where to double-check your built artifacts. The warning
+is informational -- many NIFs do cross-compile cleanly, and
+`rustler_precompiled` sidesteps the issue when prebuilts cover your
+targets.
+
 ## Configuration reference
 
 ```elixir
