@@ -87,6 +87,40 @@ That generates `.github/workflows/release.yml` and, if enabled, an
 installer script, and a Homebrew formula template. Commit the
 generated files and push a tag like `v0.1.0` to trigger the workflow.
 
+> **Heads-up: your CLI needs an Application callback.** Burrito's
+> `main_module` config key is **metadata only** — Burrito boots the
+> BEAM but never calls `main/1` itself. Without an OTP application
+> callback that reads argv and runs your CLI, the binary launches
+> and just sits there until you SIGTERM it. The minimal pattern:
+>
+> ```elixir
+> # mix.exs
+> def application do
+>   [extra_applications: [:logger], mod: {MyCli.Application, []}]
+> end
+>
+> # lib/my_cli/application.ex
+> defmodule MyCli.Application do
+>   use Application
+>
+>   def start(_type, _args) do
+>     if Burrito.Util.running_standalone?() do
+>       spawn(fn ->
+>         MyCli.run(Burrito.Util.Args.argv())
+>         System.halt(0)
+>       end)
+>     end
+>
+>     Supervisor.start_link([], strategy: :one_for_one, name: MyCli.Supervisor)
+>   end
+> end
+> ```
+>
+> The `running_standalone?/0` guard keeps `mix test` and `iex -S mix`
+> from hijacking their own argv. See
+> [`tinfoil_demo`](https://github.com/joshrotenberg/tinfoil_demo) for
+> a full working example.
+
 ## Generated files
 
 ```
