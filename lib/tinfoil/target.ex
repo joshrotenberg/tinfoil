@@ -64,7 +64,11 @@ defmodule Tinfoil.Target do
       os_family: :linux
     },
     linux_arm64: %{
-      runner: "ubuntu-24.04-arm",
+      # Cross-compiled from x86_64 via Zig (the same path Burrito uses for
+      # Windows). ubuntu-24.04-arm is only available on paid GitHub plans,
+      # so the free-tier friendly default wins. Paid users can flip the
+      # runner back via :extra_targets if they want a native arm64 build.
+      runner: "ubuntu-latest",
       burrito_os: :linux,
       burrito_cpu: :aarch64,
       triple: "aarch64-unknown-linux-musl",

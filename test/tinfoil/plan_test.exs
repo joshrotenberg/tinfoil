@@ -116,6 +116,48 @@ defmodule Tinfoil.PlanTest do
     end
   end
 
+  describe "build_entries/1" do
+    test "flat mode yields one entry per target preserving order" do
+      entries =
+        build_config()
+        |> Plan.build()
+        |> Plan.build_entries()
+
+      assert Enum.map(entries, & &1.id) == [
+               "darwin_arm64",
+               "darwin_x86_64",
+               "linux_x86_64",
+               "linux_arm64"
+             ]
+
+      assert Enum.all?(entries, &(&1.targets == &1.id))
+    end
+
+    test "grouped mode collapses targets sharing runner + os_family" do
+      entries =
+        build_config(single_runner_per_os: true)
+        |> Plan.build()
+        |> Plan.build_entries()
+
+      ids = Enum.map(entries, & &1.id) |> Enum.sort()
+      assert ids == ["darwin", "linux"]
+
+      # First darwin target listed is :darwin_arm64, so its runner
+      # (macos-latest) owns the whole darwin family in grouped mode.
+      darwin = Enum.find(entries, &(&1.id == "darwin"))
+      assert darwin.runner == "macos-latest"
+
+      assert String.split(darwin.targets, ",") |> Enum.sort() ==
+               ["darwin_arm64", "darwin_x86_64"]
+
+      linux = Enum.find(entries, &(&1.id == "linux"))
+      assert linux.runner == "ubuntu-latest"
+
+      assert String.split(linux.targets, ",") |> Enum.sort() ==
+               ["linux_arm64", "linux_x86_64"]
+    end
+  end
+
   describe "matrix/1" do
     test "returns an include-wrapped list of target plans" do
       plan = build_config(targets: [:darwin_arm64, :linux_x86_64]) |> Plan.build()
@@ -190,7 +232,7 @@ defmodule Tinfoil.PlanTest do
       assert out =~ "x86_64-unknown-linux-musl"
       assert out =~ "aarch64-unknown-linux-musl"
       assert out =~ "macos-latest"
-      assert out =~ "ubuntu-24.04-arm"
+      assert out =~ "ubuntu-latest"
     end
 
     test "shows the burrito column and burrito_name values" do

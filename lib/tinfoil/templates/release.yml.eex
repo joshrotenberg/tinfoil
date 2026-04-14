@@ -15,18 +15,14 @@ env:
 
 jobs:
   build:
-    name: Build ${{ matrix.target }}
+    name: Build ${{ matrix.id }}
     strategy:
       fail-fast: false
       matrix:
-        include:<%= for target <- @targets do %><% spec = Tinfoil.Target.spec!(target, @extra_targets) %><% burrito_name = Map.fetch!(@burrito_names, target) %>
-          - target: <%= target %>
-            burrito_name: <%= burrito_name %>
-            runner: <%= spec.runner %>
-            triple: <%= spec.triple %>
-            burrito_os: <%= spec.burrito_os %>
-            burrito_cpu: <%= spec.burrito_cpu %>
-            os_family: <%= spec.os_family %><% end %>
+        include:<%= for entry <- @build_entries do %>
+          - id: <%= entry.id %>
+            targets: "<%= entry.targets %>"
+            runner: <%= entry.runner %><% end %>
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
@@ -49,20 +45,23 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-${{ matrix.target }}-mix-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-${{ matrix.id }}-mix-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.target }}-mix-
+            ${{ runner.os }}-${{ matrix.id }}-mix-
 
       - name: Install dependencies
         run: mix deps.get
 
       - name: Build and package release
-        run: mix tinfoil.build --target ${{ matrix.target }}
+        run: |
+          for target in $(echo "${{ matrix.targets }}" | tr ',' ' '); do
+            mix tinfoil.build --target "$target"
+          done
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: binary-${{ matrix.triple }}
+          name: binary-${{ matrix.id }}
           path: _tinfoil/*
           if-no-files-found: error
 
