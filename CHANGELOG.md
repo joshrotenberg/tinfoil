@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.5](https://github.com/joshrotenberg/tinfoil/compare/v0.2.4...v0.2.5) (2026-04-14)
+
+
+### Features
+
+* windows_x86_64 target via cross-compile from ubuntu-latest ([#42](https://github.com/joshrotenberg/tinfoil/issues/42)) ([d278c27](https://github.com/joshrotenberg/tinfoil/commit/d278c2707cab8dd1957576b7c9442cab0cfa7b0b))
+
 ## [0.2.4](https://github.com/joshrotenberg/tinfoil/compare/v0.2.3...v0.2.4) (2026-04-14)
 
 
