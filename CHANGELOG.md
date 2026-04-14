@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.18](https://github.com/joshrotenberg/tinfoil/compare/v0.2.17...v0.2.18) (2026-04-14)
+
+
+### Features
+
+* build provenance attestations + Linuxbrew docs ([#92](https://github.com/joshrotenberg/tinfoil/issues/92)) ([d669cc1](https://github.com/joshrotenberg/tinfoil/commit/d669cc145c6200e62848d08a62676417c39cfa42))
+
 ## [0.2.17](https://github.com/joshrotenberg/tinfoil/compare/v0.2.16...v0.2.17) (2026-04-14)
 
 
