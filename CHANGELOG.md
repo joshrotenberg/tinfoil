@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.12](https://github.com/joshrotenberg/tinfoil/compare/v0.2.11...v0.2.12) (2026-04-14)
+
+
+### Features
+
+* --dry-run for publish + homebrew, spec coverage cleanup ([#72](https://github.com/joshrotenberg/tinfoil/issues/72)) ([c1edd93](https://github.com/joshrotenberg/tinfoil/commit/c1edd9318d708eaa3f0432ae433b067613067215))
+
+
+### Bug Fixes
+
+* --install runs on projects that already have partial state ([#70](https://github.com/joshrotenberg/tinfoil/issues/70)) ([b5def0a](https://github.com/joshrotenberg/tinfoil/commit/b5def0a954a7e739d9106ddf0c4015a523b5d826))
+
 ## [0.2.11](https://github.com/joshrotenberg/tinfoil/compare/v0.2.10...v0.2.11) (2026-04-14)
 
 
