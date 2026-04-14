@@ -127,7 +127,11 @@ defmodule Mix.Tasks.Tinfoil.Init do
 
       if changed or application_status == :inserted or cli_status == :inserted do
         Mix.shell().info([:cyan, "\n* running mix deps.get", :reset])
-        Mix.Task.run("deps.get")
+        # Spawn a fresh mix process instead of `Mix.Task.run("deps.get")`:
+        # the in-process task runner uses the Mix.Project state that was
+        # loaded BEFORE we rewrote mix.exs, so it would read the old
+        # (empty) deps list and report success without fetching anything.
+        run_external_deps_get()
         Mix.shell().info([:cyan, "\nNow re-run ", :reset, "mix tinfoil.init"])
       else
         Mix.shell().info("mix.exs already fully scaffolded; nothing to do")
@@ -157,6 +161,18 @@ defmodule Mix.Tasks.Tinfoil.Init do
       File.mkdir_p!(Path.dirname(relative))
       File.write!(relative, renderer.(app))
       :inserted
+    end
+  end
+
+  defp run_external_deps_get do
+    mix = System.find_executable("mix") || "mix"
+
+    case System.cmd(mix, ["deps.get"], into: IO.stream(:stdio, :line), stderr_to_stdout: true) do
+      {_, 0} ->
+        :ok
+
+      {_, status} ->
+        Mix.raise("mix deps.get failed (exit #{status})")
     end
   end
 
