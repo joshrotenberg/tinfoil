@@ -4,38 +4,44 @@ defmodule Mix.Tasks.Tinfoil.Init do
   @moduledoc """
   Initialize tinfoil for the current mix project.
 
-  This is the starting point. It will:
+  By default, if no `:tinfoil` config is found in `mix.exs`, this
+  task prints a snippet to paste and exits. If a config is already
+  present, it generates the release pipeline files:
 
-    1. Check whether the project already has a `:tinfoil` config in
-       `mix.exs`; if not, print a config snippet to add.
-    2. If a config is already present, generate the release pipeline
-       files:
-
-         * `.github/workflows/release.yml`
-         * `scripts/install.sh`         (if `:installer` enabled)
-         * `scripts/update-homebrew.sh` (if `:homebrew` enabled)
-         * `.tinfoil/formula.rb.eex`    (if `:homebrew` enabled)
+    * `.github/workflows/release.yml`
+    * `.tinfoil/formula.rb.eex`    (if `:homebrew` enabled)
+    * `scripts/install.sh`         (if `:installer` enabled)
 
   ## Flags
 
-    * `--force`  — overwrite existing generated files (default: true)
-    * `--print`  — print the suggested config snippet and exit
+    * `--install` — splice `{:tinfoil, ...}` into `deps/0` and a
+      minimal `:tinfoil` config into `project/0`, then run
+      `mix deps.get`. Only touches `mix.exs` files that still match
+      the `mix new` layout; on anything more customized it falls
+      back to printing the snippet.
+    * `--force`   — overwrite existing generated files (default: true)
+    * `--print`   — print the suggested config snippet and exit
   """
 
   use Mix.Task
 
-  alias Tinfoil.{Config, Generator, Target}
+  alias Tinfoil.{Config, Generator, ProjectEditor, Target}
 
   @impl Mix.Task
   def run(argv) do
     {opts, _, _} =
-      OptionParser.parse(argv, switches: [force: :boolean, print: :boolean])
+      OptionParser.parse(argv,
+        switches: [force: :boolean, print: :boolean, install: :boolean]
+      )
 
     project = Mix.Project.config()
 
     cond do
       opts[:print] ->
         print_snippet(project)
+
+      opts[:install] and not has_tinfoil_config?(project) ->
+        install_into_mix_exs()
 
       not has_tinfoil_config?(project) ->
         Mix.shell().info([
@@ -48,7 +54,8 @@ defmodule Mix.Tasks.Tinfoil.Init do
 
         Mix.shell().info("""
 
-        Add the snippet above to your `project/0` in mix.exs, then run:
+        Add the snippet above to your `project/0` in mix.exs (or run
+        `mix tinfoil.init --install` to do it automatically), then:
 
             mix tinfoil.init
         """)
@@ -63,6 +70,64 @@ defmodule Mix.Tasks.Tinfoil.Init do
           {:error, reason} ->
             Mix.raise("tinfoil config error: #{inspect(reason)}")
         end
+    end
+  end
+
+  # Splice the tinfoil dep and :tinfoil config into mix.exs, then
+  # re-fetch deps. The edits are atomic: if either splice can't find
+  # its anchor, the file is left untouched and we fall back to the
+  # manual snippet.
+  defp install_into_mix_exs do
+    path = "mix.exs"
+
+    unless File.regular?(path) do
+      Mix.raise("mix.exs not found in #{File.cwd!()}")
+    end
+
+    source = File.read!(path)
+
+    with {:ok, with_dep, dep_status} <-
+           ProjectEditor.insert_dep(source, tinfoil_version()),
+         {:ok, with_config, config_status} <-
+           ProjectEditor.insert_tinfoil_config(with_dep, default_targets()) do
+      if source == with_config do
+        Mix.shell().info("mix.exs already references tinfoil; nothing to do")
+      else
+        File.write!(path, with_config)
+        report_install(dep_status, config_status)
+        Mix.shell().info([:cyan, "* running mix deps.get", :reset])
+        Mix.Task.run("deps.get")
+        Mix.shell().info([:cyan, "\nNow re-run ", :reset, "mix tinfoil.init"])
+      end
+    else
+      {:error, reason} ->
+        Mix.shell().info([
+          :yellow,
+          "could not auto-edit mix.exs (#{inspect(reason)}); paste manually:\n",
+          :reset
+        ])
+
+        print_snippet(Mix.Project.config())
+    end
+  end
+
+  defp report_install(dep_status, config_status) do
+    Mix.shell().info([
+      :green,
+      "* dep: ",
+      :reset,
+      to_string(dep_status),
+      :green,
+      "  * config: ",
+      :reset,
+      to_string(config_status)
+    ])
+  end
+
+  defp tinfoil_version do
+    case Application.spec(:tinfoil, :vsn) do
+      nil -> "0.2"
+      vsn -> vsn |> to_string() |> String.split(".") |> Enum.take(2) |> Enum.join(".")
     end
   end
 
