@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.16](https://github.com/joshrotenberg/tinfoil/compare/v0.2.15...v0.2.16) (2026-04-14)
+
+
+### Features
+
+* add Dogfood workflow that smoke-tests each release ([#79](https://github.com/joshrotenberg/tinfoil/issues/79)) ([2a1fa5e](https://github.com/joshrotenberg/tinfoil/commit/2a1fa5efbeb4b3b80b199c4f814623992ba34d2a))
+
+
+### Bug Fixes
+
+* --install spawns a fresh mix for deps.get ([#81](https://github.com/joshrotenberg/tinfoil/issues/81)) ([3cd2f44](https://github.com/joshrotenberg/tinfoil/commit/3cd2f441ac81f4c2a8da6e88ca178c85d29fb79f))
+
 ## [0.2.15](https://github.com/joshrotenberg/tinfoil/compare/v0.2.14...v0.2.15) (2026-04-14)
 
 
