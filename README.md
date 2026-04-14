@@ -76,6 +76,13 @@ mix deps.get
 mix tinfoil.init
 ```
 
+Or skip the manual edits entirely on a fresh `mix new` project:
+
+```sh
+mix tinfoil.init --install   # splices dep + config into mix.exs
+mix tinfoil.init             # generates the workflow
+```
+
 That generates `.github/workflows/release.yml` and, if enabled, an
 installer script, and a Homebrew formula template. Commit the
 generated files and push a tag like `v0.1.0` to trigger the workflow.
@@ -102,7 +109,7 @@ push it to the configured tap.
 
 | Task                     | Description |
 | ------------------------ | ----------- |
-| `mix tinfoil.init`       | Print a suggested `:tinfoil` config snippet and, if one already exists, generate the workflow and supporting files. |
+| `mix tinfoil.init`       | Print a suggested `:tinfoil` config snippet and, if one already exists, generate the workflow and supporting files. Pass `--install` to splice the tinfoil dep + a starter config into `mix.exs` and run `mix deps.get`. |
 | `mix tinfoil.generate`   | Regenerate the workflow and scripts from the current config. Run after editing `:tinfoil` in mix.exs or upgrading tinfoil. |
 | `mix tinfoil.plan`       | Print what would be built and released. Supports `--format human` (default), `--format json`, and `--format matrix` for GitHub Actions consumption. |
 | `mix tinfoil.build`      | Build a single target: run `mix release` with the right `BURRITO_TARGET`, package the binary into a tar.gz, and write a sha256 sidecar. Called by the generated workflow once per matrix entry. |
