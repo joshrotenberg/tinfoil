@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.19](https://github.com/joshrotenberg/tinfoil/compare/v0.2.18...v0.2.19) (2026-04-14)
+
+
+### Features
+
+* bundle extra files into release archives ([#94](https://github.com/joshrotenberg/tinfoil/issues/94)) ([32cfd93](https://github.com/joshrotenberg/tinfoil/commit/32cfd9337c61ea6cfd62f6aad4d0d3254fa52d47))
+
 ## [0.2.18](https://github.com/joshrotenberg/tinfoil/compare/v0.2.17...v0.2.18) (2026-04-14)
 
 
