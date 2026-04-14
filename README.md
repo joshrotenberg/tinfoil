@@ -326,6 +326,29 @@ If your secret is named differently, override the name with
 task reads is fixed; only the secret reference in the workflow is
 configurable.
 
+### Runtime output from the wrapped binary
+
+A Burrito-wrapped binary prints a handful of diagnostic lines to
+stderr on every invocation before your CLI output:
+
+```
+debug: Unpacked 977 files
+debug: Going to clean up older versions of this application...
+debug: Launching erlang...
+[l] Uninstalled older version (v0.5.0)
+```
+
+These are emitted by Burrito's Zig wrapper (the `debug:` lines) and
+its maintenance pass (the `[l]` line when an older cached version is
+cleaned up). They are **not** tinfoil's output and tinfoil cannot
+silence them from the outside -- the wrapper runs before any Elixir
+code loads. Passing `debug: false` inside your `burrito:` config block
+has no effect on these lines as of Burrito 1.5.
+
+The noise is safe to redirect (`your_cli 2>/dev/null`) if it bothers
+end users. Upstream tracking lives with Burrito; follow
+<https://github.com/burrito-elixir/burrito> if a quieter mode lands.
+
 ### NIFs and cross-compilation
 
 Burrito cross-compiles via Zig, which handles pure Erlang/Elixir deps

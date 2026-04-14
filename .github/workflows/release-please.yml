@@ -38,3 +38,16 @@ jobs:
       - run: mix hex.publish --yes
         env:
           HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+
+      # The release: published event fired by release-please above runs
+      # under GITHUB_TOKEN, and GitHub silently suppresses downstream
+      # workflow triggers from GITHUB_TOKEN. Dispatch the smoke test
+      # explicitly so each release gets exercised end-to-end.
+      - name: Trigger dogfood smoke
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          version="${TAG#v}"
+          gh workflow run dogfood.yml --ref main -f version="$version"
