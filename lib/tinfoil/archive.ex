@@ -59,6 +59,31 @@ defmodule Tinfoil.Archive do
   end
 
   @doc """
+  Create `<output_dir>/<archive_basename>.zip` containing the file at
+  `binary_path`, renamed to `name_in_archive` inside the archive.
+
+  Used for Windows targets, where users expect `.zip` and the wrapped
+  binary already carries a `.exe` suffix (so `name_in_archive` should
+  include it). The zip format does not carry unix mode bits, so no
+  `chmod` dance is needed.
+
+  Returns the path to the written archive.
+  """
+  @spec zip(Path.t(), String.t(), String.t(), Path.t()) :: Path.t()
+  def zip(binary_path, name_in_archive, archive_basename, output_dir) do
+    File.mkdir_p!(output_dir)
+    archive_path = Path.join(output_dir, archive_basename <> ".zip")
+
+    {:ok, _} =
+      :zip.create(
+        String.to_charlist(archive_path),
+        [{String.to_charlist(name_in_archive), File.read!(binary_path)}]
+      )
+
+    archive_path
+  end
+
+  @doc """
   Compute the SHA256 of the file at `path`, write a `<path>.sha256`
   sidecar in `shasum -a 256` format (`<hex>  <filename>\\n`), and
   return `{hex_digest, sidecar_path}`.

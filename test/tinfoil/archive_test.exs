@@ -81,6 +81,41 @@ defmodule Tinfoil.ArchiveTest do
     end
   end
 
+  describe "zip/4" do
+    @tag :tmp_dir
+    test "creates a zip with the binary renamed to name_in_archive", %{tmp_dir: tmp} do
+      binary_path = Path.join(tmp, "demo_windows_x86_64.exe")
+      File.write!(binary_path, "fake-windows-binary")
+
+      output_dir = Path.join(tmp, "out")
+
+      archive =
+        Archive.zip(binary_path, "demo.exe", "demo-0.1.0-x86_64-pc-windows-msvc", output_dir)
+
+      assert archive == Path.join(output_dir, "demo-0.1.0-x86_64-pc-windows-msvc.zip")
+      assert File.exists?(archive)
+
+      {:ok, entries} = :zip.list_dir(String.to_charlist(archive))
+
+      names =
+        entries
+        |> Enum.flat_map(fn
+          {:zip_file, name, _, _, _, _} -> [to_string(name)]
+          _ -> []
+        end)
+
+      assert names == ["demo.exe"]
+
+      extract_dir = Path.join(tmp, "extracted")
+      File.mkdir_p!(extract_dir)
+
+      {:ok, _} =
+        :zip.extract(String.to_charlist(archive), [{:cwd, String.to_charlist(extract_dir)}])
+
+      assert File.read!(Path.join(extract_dir, "demo.exe")) == "fake-windows-binary"
+    end
+  end
+
   describe "sha256/1" do
     @tag :tmp_dir
     test "writes a shasum-style sidecar and returns the digest", %{tmp_dir: tmp} do

@@ -182,12 +182,13 @@ build:
 
 ## Supported targets
 
-| Target          | Triple                          | GitHub runner       |
-| --------------- | ------------------------------- | ------------------- |
-| `:darwin_arm64` | `aarch64-apple-darwin`          | `macos-latest`      |
-| `:darwin_x86_64`| `x86_64-apple-darwin`           | `macos-15-intel`    |
-| `:linux_x86_64` | `x86_64-unknown-linux-musl`     | `ubuntu-latest`     |
-| `:linux_arm64`  | `aarch64-unknown-linux-musl`    | `ubuntu-24.04-arm`  |
+| Target             | Triple                          | GitHub runner       | Archive  |
+| ------------------ | ------------------------------- | ------------------- | -------- |
+| `:darwin_arm64`    | `aarch64-apple-darwin`          | `macos-latest`      | `.tar.gz`|
+| `:darwin_x86_64`   | `x86_64-apple-darwin`           | `macos-15-intel`    | `.tar.gz`|
+| `:linux_x86_64`    | `x86_64-unknown-linux-musl`     | `ubuntu-latest`     | `.tar.gz`|
+| `:linux_arm64`     | `aarch64-unknown-linux-musl`    | `ubuntu-24.04-arm`  | `.tar.gz`|
+| `:windows_x86_64`  | `x86_64-pc-windows-msvc`        | `ubuntu-latest`     | `.zip`   |
 
 Triples follow the standard Rust-style convention since that is what
 users expect to see in release asset names.
@@ -198,7 +199,10 @@ users expect to see in release asset names.
 > the Intel Mac install base will be small enough that dropping the
 > target is likely the right call.
 
-Windows support is deferred until Burrito's Windows story stabilizes.
+Windows builds cross-compile from `ubuntu-latest` via Zig (the same
+runner used for Linux); a native `windows-latest` runner is not
+needed. The generated installer script targets Unix shells only --
+shipping a PowerShell installer for Windows users is future work.
 
 ### NIFs and cross-compilation
 

@@ -60,7 +60,9 @@ defmodule Tinfoil.Build do
       run_release(burrito_name)
     end
 
-    binary = Path.join("burrito_out", "#{config.app}_#{burrito_name}")
+    spec = Target.spec!(target, config.extra_targets)
+    binary_ext = binary_extension(spec)
+    binary = Path.join("burrito_out", "#{config.app}_#{burrito_name}#{binary_ext}")
 
     if not File.exists?(binary) do
       raise "no Burrito output at #{binary}. " <>
@@ -69,7 +71,7 @@ defmodule Tinfoil.Build do
 
     info(["* packaging ", binary])
     archive_basename = Config.archive_basename(config, target)
-    archive = Archive.tar_gz(binary, config.app, archive_basename, output_dir)
+    archive = package(spec, binary, config.app, archive_basename, output_dir)
     {sha, sidecar} = Archive.sha256(archive)
 
     %{
@@ -108,6 +110,23 @@ defmodule Tinfoil.Build do
   end
 
   ## ───────────────────── internals ─────────────────────
+
+  # Burrito appends .exe to the wrapped binary on Windows targets; other
+  # targets have no extension on the output name.
+  defp binary_extension(%{os_family: :windows}), do: ".exe"
+  defp binary_extension(_), do: ""
+
+  # Pick the archive format from the target spec. Windows uses zip; every
+  # other target produces tar.gz.
+  defp package(%{archive_ext: ".zip"}, binary, app, basename, output_dir) do
+    # Windows binaries carry the .exe suffix inside the archive too.
+    name_in_archive = "#{app}.exe"
+    Archive.zip(binary, name_in_archive, basename, output_dir)
+  end
+
+  defp package(_spec, binary, app, basename, output_dir) do
+    Archive.tar_gz(binary, app, basename, output_dir)
+  end
 
   defp run_release(burrito_name) do
     System.put_env("BURRITO_TARGET", to_string(burrito_name))
