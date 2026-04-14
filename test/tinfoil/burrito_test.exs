@@ -98,7 +98,7 @@ defmodule Tinfoil.BurritoTest do
     test "errors when no burrito target has the right os+cpu" do
       burrito = %{linux: [os: :linux, cpu: :x86_64]}
 
-      assert {:error, {:no_matching_burrito_target, :darwin_arm64}} =
+      assert {:error, {:no_matching_burrito_target, :darwin_arm64, _}} =
                Burrito.resolve(:darwin_arm64, burrito)
     end
   end
@@ -123,7 +123,7 @@ defmodule Tinfoil.BurritoTest do
     test "halts and returns the first unresolved target" do
       burrito = %{l: [os: :linux, cpu: :x86_64]}
 
-      assert {:error, {:no_matching_burrito_target, :darwin_arm64}} =
+      assert {:error, {:no_matching_burrito_target, :darwin_arm64, _}} =
                Burrito.resolve_all([:linux_x86_64, :darwin_arm64], burrito)
     end
   end

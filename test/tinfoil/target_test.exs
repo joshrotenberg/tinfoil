@@ -3,10 +3,56 @@ defmodule Tinfoil.TargetTest do
 
   alias Tinfoil.Target
 
-  describe "all/0" do
-    test "returns the full set of supported targets" do
-      assert Enum.sort(Target.all()) ==
+  @extra %{
+    linux_riscv64: %{
+      runner: "ubuntu-latest",
+      burrito_os: :linux,
+      burrito_cpu: :riscv64,
+      triple: "riscv64-unknown-linux-musl",
+      archive_ext: ".tar.gz",
+      os_family: :linux
+    }
+  }
+
+  describe "builtin/0 and all/1" do
+    test "builtin/0 returns just the hardcoded targets" do
+      assert Enum.sort(Target.builtin()) ==
                Enum.sort([:darwin_arm64, :darwin_x86_64, :linux_arm64, :linux_x86_64])
+    end
+
+    test "all/1 merges extras on top of builtins" do
+      assert :linux_riscv64 in Target.all(@extra)
+      assert :darwin_arm64 in Target.all(@extra)
+    end
+  end
+
+  describe "extras" do
+    test "spec!/2 resolves user-defined targets" do
+      spec = Target.spec!(:linux_riscv64, @extra)
+      assert spec.triple == "riscv64-unknown-linux-musl"
+      assert spec.burrito_cpu == :riscv64
+    end
+
+    test "validate/2 accepts extras as valid targets" do
+      assert Target.validate([:darwin_arm64, :linux_riscv64], @extra) == :ok
+    end
+
+    test "validate_extras rejects shadowing a built-in" do
+      shadow = %{darwin_arm64: @extra.linux_riscv64}
+      assert {:error, {:extra_target_shadows_builtin, :darwin_arm64}} =
+               Target.validate_extras(shadow)
+    end
+
+    test "validate_extras rejects missing keys" do
+      incomplete = %{linux_riscv64: %{runner: "x", triple: "y"}}
+      assert {:error, {:extra_target_missing_keys, :linux_riscv64, missing}} =
+               Target.validate_extras(incomplete)
+      assert :burrito_os in missing
+    end
+
+    test "validate_extras tolerates nil and empty map" do
+      assert Target.validate_extras(nil) == {:ok, %{}}
+      assert Target.validate_extras(%{}) == {:ok, %{}}
     end
   end
 

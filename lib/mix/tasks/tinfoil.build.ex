@@ -77,7 +77,7 @@ defmodule Mix.Tasks.Tinfoil.Build do
     String.to_existing_atom(string)
   rescue
     ArgumentError ->
-      Mix.raise("unknown --target #{inspect(string)}. Valid: #{inspect(Target.all())}")
+      Mix.raise("unknown --target #{inspect(string)}. Valid: #{inspect(Target.builtin())}")
   end
 
   defp warn_if_not_prod do

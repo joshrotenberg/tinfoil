@@ -75,7 +75,7 @@ defmodule Tinfoil.Plan do
   ## ───────────────────── internals ─────────────────────
 
   defp target_plan(target, config) do
-    spec = Target.spec!(target)
+    spec = Target.spec!(target, config.extra_targets)
 
     %{
       target: target,

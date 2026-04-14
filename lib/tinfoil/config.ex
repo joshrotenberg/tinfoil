@@ -37,6 +37,8 @@ defmodule Tinfoil.Config do
     homebrew: %{enabled: false, tap: nil, formula_name: nil},
     installer: %{enabled: false, install_dir: "~/.local/bin"},
     checksums: :sha256,
+    prerelease_pattern: nil,
+    extra_targets: %{},
     ci: %{
       provider: :github_actions,
       elixir_version: "1.19",
@@ -59,6 +61,8 @@ defmodule Tinfoil.Config do
           homebrew: map(),
           installer: map(),
           checksums: :sha256,
+          prerelease_pattern: Regex.t(),
+          extra_targets: Target.extras(),
           ci: map()
         }
 
@@ -73,13 +77,15 @@ defmodule Tinfoil.Config do
     app = Keyword.fetch!(project, :app)
 
     with {:ok, tinfoil} <- fetch_tinfoil(project),
+         {:ok, extra_targets} <- Target.validate_extras(Keyword.get(tinfoil, :extra_targets, %{})),
          {:ok, targets} <- fetch_targets(tinfoil),
-         :ok <- Target.validate(targets),
+         :ok <- Target.validate(targets, extra_targets),
          {:ok, archive_name} <- fetch_archive_name(tinfoil),
          {:ok, archive_format} <- fetch_archive_format(tinfoil),
+         {:ok, prerelease_pattern} <- fetch_prerelease_pattern(tinfoil),
          {:ok, homebrew} <- fetch_homebrew(tinfoil, project),
          {:ok, burrito_targets} <- Burrito.extract_targets(project, app),
-         {:ok, burrito_names} <- Burrito.resolve_all(targets, burrito_targets) do
+         {:ok, burrito_names} <- Burrito.resolve_all(targets, burrito_targets, extra_targets) do
       config = %__MODULE__{
         app: app,
         version: Keyword.fetch!(project, :version),
@@ -94,6 +100,8 @@ defmodule Tinfoil.Config do
         homebrew: homebrew,
         installer: merge_installer(Keyword.get(tinfoil, :installer, [])),
         checksums: Keyword.get(tinfoil, :checksums, :sha256),
+        prerelease_pattern: prerelease_pattern,
+        extra_targets: extra_targets,
         ci: merge_ci(Keyword.get(tinfoil, :ci, []), project)
       }
 
@@ -118,7 +126,7 @@ defmodule Tinfoil.Config do
   """
   @spec archive_basename(t(), Target.target()) :: String.t()
   def archive_basename(%__MODULE__{} = config, target) do
-    triple = Target.triple(target)
+    triple = Target.triple(target, config.extra_targets)
 
     config.archive_name
     |> String.replace("{app}", to_string(config.app))
@@ -182,6 +190,16 @@ defmodule Tinfoil.Config do
       {:ok, format}
     else
       {:error, {:invalid_archive_format, format}}
+    end
+  end
+
+  @default_prerelease_pattern ~r/-(rc|beta|alpha)(\.|$)/
+
+  defp fetch_prerelease_pattern(tinfoil) do
+    case Keyword.fetch(tinfoil, :prerelease_pattern) do
+      :error -> {:ok, @default_prerelease_pattern}
+      {:ok, %Regex{} = r} -> {:ok, r}
+      {:ok, other} -> {:error, {:invalid_prerelease_pattern, other}}
     end
   end
 
@@ -362,7 +380,7 @@ defmodule Tinfoil.Config do
 
   defp format_error({:unknown_targets, bad}) do
     "unknown tinfoil targets: #{inspect(bad)}. " <>
-      "Valid targets: #{inspect(Target.all())}"
+      "Valid targets: #{inspect(Target.builtin())} (plus any :extra_targets you declare)"
   end
 
   defp format_error(:archive_name_not_string),
@@ -431,13 +449,35 @@ defmodule Tinfoil.Config do
       "multiple releases in mix.exs (#{inspect(names)}) but none named #{inspect(app)}. " <>
         "Either name a release after the app or keep a single release."
 
-  defp format_error({:no_matching_burrito_target, target}) do
-    spec = Target.spec!(target)
+  defp format_error({:no_matching_burrito_target, target, spec}) do
 
     "tinfoil target #{inspect(target)} has no matching Burrito target " <>
       "(looking for [os: #{inspect(spec.burrito_os)}, cpu: #{inspect(spec.burrito_cpu)}]). " <>
       "Add a matching entry to your :burrito :targets in mix.exs."
   end
+
+  defp format_error({:extra_targets_not_map, v}),
+    do: ":tinfoil :extra_targets must be a map, got: #{inspect(v)}"
+
+  defp format_error({:extra_target_name_not_atom, name}),
+    do: ":tinfoil :extra_targets key #{inspect(name)} must be an atom"
+
+  defp format_error({:extra_target_shadows_builtin, name}),
+    do:
+      ":tinfoil :extra_targets #{inspect(name)} collides with a built-in target. " <>
+        "Pick a different name or remove it."
+
+  defp format_error({:extra_target_spec_not_map, name}),
+    do: ":tinfoil :extra_targets #{inspect(name)} spec must be a map"
+
+  defp format_error({:extra_target_missing_keys, name, missing}),
+    do:
+      ":tinfoil :extra_targets #{inspect(name)} is missing required keys: #{inspect(missing)}. " <>
+        "Each extra target needs :runner, :burrito_os, :burrito_cpu, :triple, :archive_ext, :os_family."
+
+  defp format_error({:invalid_prerelease_pattern, value}),
+    do:
+      ":tinfoil :prerelease_pattern must be a Regex (e.g. ~r/-(rc|beta)/), got: #{inspect(value)}"
 
   defp format_error(other), do: "invalid tinfoil config: #{inspect(other)}"
 end

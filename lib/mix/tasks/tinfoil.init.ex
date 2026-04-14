@@ -92,7 +92,7 @@ defmodule Mix.Tasks.Tinfoil.Init do
     ])
   end
 
-  defp default_targets, do: Target.all()
+  defp default_targets, do: Target.builtin()
 
   defp owner_from_remote do
     case Config.infer_github_repo() do

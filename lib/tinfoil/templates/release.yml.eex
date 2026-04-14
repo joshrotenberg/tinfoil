@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:<%= for target <- @targets do %><% spec = Tinfoil.Target.spec!(target) %><% burrito_name = Map.fetch!(@burrito_names, target) %>
+        include:<%= for target <- @targets do %><% spec = Tinfoil.Target.spec!(target, @extra_targets) %><% burrito_name = Map.fetch!(@burrito_names, target) %>
           - target: <%= target %>
             burrito_name: <%= burrito_name %>
             runner: <%= spec.runner %>

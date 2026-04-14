@@ -6,7 +6,7 @@ defmodule Tinfoil.Target do
   GitHub Actions runner, Burrito target/cpu atoms, canonical triple used
   in archive names, and archive extension.
 
-  ## Supported targets
+  ## Built-in targets
 
     * `:darwin_arm64`  — Apple Silicon macOS
     * `:darwin_x86_64` — Intel macOS
@@ -16,9 +16,16 @@ defmodule Tinfoil.Target do
   Triples follow the standard Rust-style convention (e.g.
   `aarch64-apple-darwin`) because that is what users expect in release
   asset names.
+
+  ## Extending the matrix
+
+  Projects can declare additional targets via the `:extra_targets` key
+  in their `:tinfoil` config. Every function in this module that looks
+  up a target accepts an optional `extras` map that is merged on top of
+  the built-in matrix. Extras take precedence on name collision.
   """
 
-  @type target :: :darwin_arm64 | :darwin_x86_64 | :linux_x86_64 | :linux_arm64
+  @type target :: atom()
 
   @type spec :: %{
           runner: String.t(),
@@ -26,10 +33,12 @@ defmodule Tinfoil.Target do
           burrito_cpu: atom(),
           triple: String.t(),
           archive_ext: String.t(),
-          os_family: :darwin | :linux
+          os_family: atom()
         }
 
-  @matrix %{
+  @type extras :: %{atom() => spec()}
+
+  @builtin %{
     darwin_arm64: %{
       runner: "macos-latest",
       burrito_os: :darwin,
@@ -64,58 +73,106 @@ defmodule Tinfoil.Target do
     }
   }
 
-  @doc "Return the list of all known target atoms."
-  @spec all() :: [target()]
-  def all, do: Map.keys(@matrix)
+  @required_spec_keys [:runner, :burrito_os, :burrito_cpu, :triple, :archive_ext, :os_family]
+
+  @doc "Return the list of all built-in target atoms."
+  @spec builtin() :: [target()]
+  def builtin, do: Map.keys(@builtin)
+
+  @doc """
+  Return the list of all known target atoms, including any extras.
+  """
+  @spec all(extras()) :: [target()]
+  def all(extras \\ %{}) do
+    matrix(extras) |> Map.keys()
+  end
 
   @doc """
   Return the full spec for a target atom, or `nil` if unknown.
   """
-  @spec spec(target()) :: spec() | nil
-  def spec(target) when is_atom(target), do: Map.get(@matrix, target)
+  @spec spec(target(), extras()) :: spec() | nil
+  def spec(target, extras \\ %{}) when is_atom(target) do
+    Map.get(matrix(extras), target)
+  end
 
   @doc """
   Return the full spec for a target atom, raising on unknown targets.
   """
-  @spec spec!(target()) :: spec()
-  def spec!(target) when is_atom(target) do
-    case Map.fetch(@matrix, target) do
+  @spec spec!(target(), extras()) :: spec()
+  def spec!(target, extras \\ %{}) when is_atom(target) do
+    m = matrix(extras)
+
+    case Map.fetch(m, target) do
       {:ok, spec} ->
         spec
 
       :error ->
         raise ArgumentError,
               "unknown tinfoil target: #{inspect(target)}. " <>
-                "Valid targets: #{inspect(all())}"
+                "Valid targets: #{inspect(Map.keys(m))}"
     end
   end
 
   @doc "Return the canonical Rust-style triple for a target."
-  @spec triple(target()) :: String.t()
-  def triple(target), do: spec!(target).triple
+  @spec triple(target(), extras()) :: String.t()
+  def triple(target, extras \\ %{}), do: spec!(target, extras).triple
 
   @doc "Return the GitHub Actions runner label for a target."
-  @spec runner(target()) :: String.t()
-  def runner(target), do: spec!(target).runner
+  @spec runner(target(), extras()) :: String.t()
+  def runner(target, extras \\ %{}), do: spec!(target, extras).runner
 
   @doc "Return the Burrito `[os: ..., cpu: ...]` keyword list for a target."
-  @spec burrito_target(target()) :: keyword()
-  def burrito_target(target) do
-    spec = spec!(target)
-    [os: spec.burrito_os, cpu: spec.burrito_cpu]
+  @spec burrito_target(target(), extras()) :: keyword()
+  def burrito_target(target, extras \\ %{}) do
+    s = spec!(target, extras)
+    [os: s.burrito_os, cpu: s.burrito_cpu]
   end
 
   @doc """
-  Validate a list of target atoms. Returns `:ok` or
-  `{:error, {:unknown_targets, [atom()]}}`.
+  Validate a list of target atoms against the built-in matrix plus the
+  supplied extras. Returns `:ok` or `{:error, {:unknown_targets, [atom()]}}`.
   """
-  @spec validate([target()]) :: :ok | {:error, {:unknown_targets, [atom()]}}
-  def validate(targets) when is_list(targets) do
-    unknown = Enum.reject(targets, &Map.has_key?(@matrix, &1))
+  @spec validate([target()], extras()) :: :ok | {:error, {:unknown_targets, [atom()]}}
+  def validate(targets, extras \\ %{}) when is_list(targets) do
+    m = matrix(extras)
+    unknown = Enum.reject(targets, &Map.has_key?(m, &1))
 
     case unknown do
       [] -> :ok
       bad -> {:error, {:unknown_targets, bad}}
     end
   end
+
+  @doc """
+  Validate an `:extra_targets` map from user config. Each entry must be
+  an atom key mapped to a spec map with every required key present.
+  """
+  @spec validate_extras(term()) :: {:ok, extras()} | {:error, term()}
+  def validate_extras(nil), do: {:ok, %{}}
+  def validate_extras(map) when map_size(map) == 0 and is_map(map), do: {:ok, %{}}
+
+  def validate_extras(map) when is_map(map) do
+    Enum.reduce_while(map, {:ok, %{}}, fn {name, spec}, {:ok, acc} ->
+      cond do
+        not is_atom(name) ->
+          {:halt, {:error, {:extra_target_name_not_atom, name}}}
+
+        Map.has_key?(@builtin, name) ->
+          {:halt, {:error, {:extra_target_shadows_builtin, name}}}
+
+        not is_map(spec) ->
+          {:halt, {:error, {:extra_target_spec_not_map, name}}}
+
+        (missing = @required_spec_keys -- Map.keys(spec)) != [] ->
+          {:halt, {:error, {:extra_target_missing_keys, name, missing}}}
+
+        true ->
+          {:cont, {:ok, Map.put(acc, name, Map.take(spec, @required_spec_keys))}}
+      end
+    end)
+  end
+
+  def validate_extras(other), do: {:error, {:extra_targets_not_map, other}}
+
+  defp matrix(extras) when is_map(extras), do: Map.merge(@builtin, extras)
 end

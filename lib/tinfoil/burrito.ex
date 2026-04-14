@@ -50,10 +50,11 @@ defmodule Tinfoil.Burrito do
   Resolve a single tinfoil target atom to the user's Burrito target
   name by matching `[os:, cpu:]` against the user's Burrito config.
   """
-  @spec resolve(Target.target(), burrito_targets()) ::
-          {:ok, atom()} | {:error, {:no_matching_burrito_target, Target.target()}}
-  def resolve(tinfoil_target, burrito_targets) do
-    spec = Target.spec!(tinfoil_target)
+  @spec resolve(Target.target(), burrito_targets(), Target.extras()) ::
+          {:ok, atom()}
+          | {:error, {:no_matching_burrito_target, Target.target(), Target.spec()}}
+  def resolve(tinfoil_target, burrito_targets, extras \\ %{}) do
+    spec = Target.spec!(tinfoil_target, extras)
 
     match =
       Enum.find(burrito_targets, fn {_name, opts} ->
@@ -62,7 +63,7 @@ defmodule Tinfoil.Burrito do
 
     case match do
       {name, _} -> {:ok, name}
-      nil -> {:error, {:no_matching_burrito_target, tinfoil_target}}
+      nil -> {:error, {:no_matching_burrito_target, tinfoil_target, spec}}
     end
   end
 
@@ -72,11 +73,11 @@ defmodule Tinfoil.Burrito do
   Returns `{:ok, %{tinfoil_target => burrito_name}}` or halts on the
   first unmatched target and returns the error.
   """
-  @spec resolve_all([Target.target()], burrito_targets()) ::
+  @spec resolve_all([Target.target()], burrito_targets(), Target.extras()) ::
           {:ok, %{Target.target() => atom()}} | {:error, term()}
-  def resolve_all(tinfoil_targets, burrito_targets) do
+  def resolve_all(tinfoil_targets, burrito_targets, extras \\ %{}) do
     Enum.reduce_while(tinfoil_targets, {:ok, %{}}, fn t, {:ok, acc} ->
-      case resolve(t, burrito_targets) do
+      case resolve(t, burrito_targets, extras) do
         {:ok, name} -> {:cont, {:ok, Map.put(acc, t, name)}}
         {:error, _} = err -> {:halt, err}
       end
