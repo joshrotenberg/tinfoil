@@ -406,6 +406,28 @@ defmodule Tinfoil.ConfigTest do
       assert Config.archive_basename(config, :darwin_arm64) ==
                "my_cli_v1.2.3_aarch64-apple-darwin"
     end
+
+    test "windows targets always get .zip regardless of project archive_format" do
+      releases = [
+        my_cli: [
+          burrito: [
+            targets: [
+              darwin_arm64: [os: :darwin, cpu: :aarch64],
+              windows_x86_64: [os: :windows, cpu: :x86_64]
+            ]
+          ]
+        ]
+      ]
+
+      {:ok, config} =
+        Config.load(base_project([targets: [:darwin_arm64, :windows_x86_64]], releases: releases))
+
+      assert Config.archive_extension(config, :darwin_arm64) == ".tar.gz"
+      assert Config.archive_extension(config, :windows_x86_64) == ".zip"
+
+      assert Config.archive_filename(config, :windows_x86_64) ==
+               "my_cli-1.2.3-x86_64-pc-windows-msvc.zip"
+    end
   end
 
   describe "load!/1" do

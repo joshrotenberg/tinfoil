@@ -71,7 +71,8 @@ defmodule Tinfoil.Build do
 
     info(["* packaging ", binary])
     archive_basename = Config.archive_basename(config, target)
-    archive = package(spec, binary, config.app, archive_basename, output_dir)
+    archive_ext = Config.archive_extension(config, target)
+    archive = package(archive_ext, binary, config.app, binary_ext, archive_basename, output_dir)
     {sha, sidecar} = Archive.sha256(archive)
 
     %{
@@ -116,15 +117,14 @@ defmodule Tinfoil.Build do
   defp binary_extension(%{os_family: :windows}), do: ".exe"
   defp binary_extension(_), do: ""
 
-  # Pick the archive format from the target spec. Windows uses zip; every
-  # other target produces tar.gz.
-  defp package(%{archive_ext: ".zip"}, binary, app, basename, output_dir) do
-    # Windows binaries carry the .exe suffix inside the archive too.
-    name_in_archive = "#{app}.exe"
-    Archive.zip(binary, name_in_archive, basename, output_dir)
+  # Pick the packer based on the archive extension resolved for this target.
+  # The binary's own extension (.exe on Windows) is preserved inside the
+  # archive so `unzip` produces a runnable file.
+  defp package(".zip", binary, app, binary_ext, basename, output_dir) do
+    Archive.zip(binary, "#{app}#{binary_ext}", basename, output_dir)
   end
 
-  defp package(_spec, binary, app, basename, output_dir) do
+  defp package(".tar.gz", binary, app, _binary_ext, basename, output_dir) do
     Archive.tar_gz(binary, app, basename, output_dir)
   end
 
