@@ -8,7 +8,6 @@ defmodule Tinfoil.Generator do
 
     * `.github/workflows/release.yml`
     * `scripts/install.sh`            (if installer enabled)
-    * `scripts/update-homebrew.sh`    (if homebrew enabled)
     * `.tinfoil/formula.rb.eex`       (if homebrew enabled)
   """
 
@@ -40,11 +39,6 @@ defmodule Tinfoil.Generator do
               path: ".tinfoil/formula.rb.eex",
               contents: render_formula(config),
               executable: false
-            },
-            %{
-              path: "scripts/update-homebrew.sh",
-              contents: render_update_homebrew(config),
-              executable: true
             }
           ]
       else
@@ -156,16 +150,6 @@ defmodule Tinfoil.Generator do
     ]
 
     eval("install.sh.eex", assigns)
-  end
-
-  @doc false
-  def render_update_homebrew(%Config{} = config) do
-    assigns = [
-      tinfoil_version: tinfoil_version(),
-      formula_name: config.homebrew.formula_name
-    ]
-
-    eval("update_homebrew.sh.eex", assigns)
   end
 
   ## ───────────── internals ─────────────

@@ -221,6 +221,8 @@ defmodule Tinfoil.Config do
     end
   end
 
+  @valid_homebrew_auth [:token, :deploy_key]
+
   defp fetch_homebrew(tinfoil, project) do
     merged = merge_homebrew(Keyword.get(tinfoil, :homebrew, []), project)
 
@@ -236,6 +238,9 @@ defmodule Tinfoil.Config do
 
       not valid_formula_name?(merged.formula_name) ->
         {:error, {:invalid_formula_name, merged.formula_name}}
+
+      merged.auth not in @valid_homebrew_auth ->
+        {:error, {:invalid_homebrew_auth, merged.auth}}
 
       true ->
         {:ok, merged}
@@ -275,7 +280,7 @@ defmodule Tinfoil.Config do
   end
 
   defp merge_homebrew(user, project) do
-    defaults = %{enabled: false, tap: nil, formula_name: nil}
+    defaults = %{enabled: false, tap: nil, formula_name: nil, auth: :token}
     merged = Map.merge(defaults, Map.new(user))
 
     formula_name =
@@ -428,6 +433,11 @@ defmodule Tinfoil.Config do
     do:
       ":tinfoil :homebrew :formula_name #{inspect(name)} is not a valid Homebrew formula name. " <>
         "Use lowercase letters, digits, hyphens, and underscores (e.g. \"my-cli\")."
+
+  defp format_error({:invalid_homebrew_auth, auth}),
+    do:
+      ":tinfoil :homebrew :auth #{inspect(auth)} is not supported. " <>
+        "Valid values: #{inspect(@valid_homebrew_auth)}."
 
   defp format_error(:release_opts_not_keyword_list),
     do: "the selected release's options block is not a keyword list"

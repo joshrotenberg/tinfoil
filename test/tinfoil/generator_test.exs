@@ -39,8 +39,9 @@ defmodule Tinfoil.GeneratorTest do
       paths = config |> Generator.render() |> Enum.map(& &1.path)
 
       assert ".tinfoil/formula.rb.eex" in paths
-      assert "scripts/update-homebrew.sh" in paths
       assert ".github/workflows/release.yml" in paths
+      # The bash update-homebrew.sh was absorbed into mix tinfoil.homebrew.
+      refute "scripts/update-homebrew.sh" in paths
     end
 
     test "emits the installer script when installer is enabled" do
@@ -59,11 +60,9 @@ defmodule Tinfoil.GeneratorTest do
 
       files = Generator.render(config)
       install = Enum.find(files, &(&1.path == "scripts/install.sh"))
-      update = Enum.find(files, &(&1.path == "scripts/update-homebrew.sh"))
       workflow = Enum.find(files, &(&1.path == ".github/workflows/release.yml"))
 
       assert install.executable
-      assert update.executable
       refute workflow.executable
     end
   end
@@ -99,14 +98,27 @@ defmodule Tinfoil.GeneratorTest do
       refute yaml =~ "HOMEBREW_TAP_TOKEN"
     end
 
-    test "workflow includes homebrew job when enabled" do
+    test "workflow includes homebrew job with token auth by default" do
       yaml =
         build_config(homebrew: [enabled: true, tap: "owner/homebrew-tap"])
         |> Generator.render_workflow()
 
       assert yaml =~ "homebrew:"
       assert yaml =~ "HOMEBREW_TAP_TOKEN"
-      assert yaml =~ "TAP_REPO: owner/homebrew-tap"
+      assert yaml =~ "mix tinfoil.homebrew --input-dir artifacts"
+      refute yaml =~ "webfactory/ssh-agent"
+    end
+
+    test "workflow uses deploy key auth when configured" do
+      yaml =
+        build_config(
+          homebrew: [enabled: true, tap: "owner/homebrew-tap", auth: :deploy_key]
+        )
+        |> Generator.render_workflow()
+
+      assert yaml =~ "webfactory/ssh-agent"
+      assert yaml =~ "HOMEBREW_TAP_DEPLOY_KEY"
+      refute yaml =~ "HOMEBREW_TAP_TOKEN"
     end
 
     test "workflow delegates build to mix tinfoil.build" do
@@ -230,16 +242,6 @@ defmodule Tinfoil.GeneratorTest do
     end
   end
 
-  describe "update_homebrew rendering" do
-    test "uses the configured formula name" do
-      sh =
-        build_config(homebrew: [enabled: true, tap: "owner/homebrew-tap"])
-        |> Generator.render_update_homebrew()
-
-      assert sh =~ "Formula/my_cli.rb"
-    end
-  end
-
   describe "write!/2" do
     @tag :tmp_dir
     test "writes generated files into root", %{tmp_dir: tmp} do
@@ -253,7 +255,6 @@ defmodule Tinfoil.GeneratorTest do
 
       assert ".github/workflows/release.yml" in result.written
       assert "scripts/install.sh" in result.written
-      assert "scripts/update-homebrew.sh" in result.written
       assert ".tinfoil/formula.rb.eex" in result.written
 
       assert File.exists?(Path.join(tmp, ".github/workflows/release.yml"))
