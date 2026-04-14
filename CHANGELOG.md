@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.20](https://github.com/joshrotenberg/tinfoil/compare/v0.2.19...v0.2.20) (2026-04-14)
+
+
+### Features
+
+* Scoop manifest publishing ([#89](https://github.com/joshrotenberg/tinfoil/issues/89)) ([#98](https://github.com/joshrotenberg/tinfoil/issues/98)) ([fdf5be5](https://github.com/joshrotenberg/tinfoil/commit/fdf5be570a61b1035376e913cd75139c9fa52789))
+
+
+### Bug Fixes
+
+* grant release-please workflow actions:write for dogfood dispatch ([#96](https://github.com/joshrotenberg/tinfoil/issues/96)) ([86a48ee](https://github.com/joshrotenberg/tinfoil/commit/86a48ee721e065f263900373e5ffd431fab9a476))
+
 ## [0.2.19](https://github.com/joshrotenberg/tinfoil/compare/v0.2.18...v0.2.19) (2026-04-14)
 
 
