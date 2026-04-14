@@ -131,14 +131,159 @@ defmodule Tinfoil.ProjectEditorTest do
     end
   end
 
-  describe "both edits against a full mix new file" do
-    test "produces a valid mix.exs that Code.string_to_quoted can parse" do
-      {:ok, with_dep, :inserted} = ProjectEditor.insert_dep(@mix_new_source, "0.2")
+  describe "insert_burrito_dep/1" do
+    test "adds a burrito entry to deps/0" do
+      {:ok, updated, :inserted} = ProjectEditor.insert_burrito_dep(@mix_new_source)
+      assert updated =~ ~s({:burrito, "~> 1.0"})
+    end
 
-      {:ok, with_both, :inserted} =
-        ProjectEditor.insert_tinfoil_config(with_dep, [:darwin_arm64, :linux_x86_64])
+    test "is idempotent" do
+      already = """
+      defp deps do
+        [
+          {:burrito, "~> 1.0"}
+        ]
+      end
+      """
 
-      assert {:ok, _ast} = Code.string_to_quoted(with_both)
+      {:ok, same, :already_present} = ProjectEditor.insert_burrito_dep(already)
+      assert same == already
+    end
+  end
+
+  describe "insert_releases_entry/1" do
+    test "inserts releases: releases() after deps: deps()" do
+      {:ok, updated, :inserted} = ProjectEditor.insert_releases_entry(@mix_new_source)
+      assert updated =~ "releases: releases()"
+      assert updated =~ "deps: deps(),"
+      refute updated =~ ",,"
+    end
+
+    test "is idempotent" do
+      already = """
+      def project do
+        [
+          deps: deps(),
+          releases: releases()
+        ]
+      end
+      """
+
+      {:ok, same, :already_present} = ProjectEditor.insert_releases_entry(already)
+      assert same == already
+    end
+  end
+
+  describe "insert_releases_block/3" do
+    test "appends a defp releases function before the module end" do
+      {:ok, updated, :inserted} =
+        ProjectEditor.insert_releases_block(@mix_new_source, :my_cli, [
+          :darwin_arm64,
+          :linux_x86_64
+        ])
+
+      assert updated =~ "defp releases do"
+      assert updated =~ "my_cli: ["
+      assert updated =~ "steps: [:assemble, &Burrito.wrap/1]"
+      assert updated =~ "darwin_arm64: [os: :darwin, cpu: :aarch64]"
+      assert updated =~ "linux_x86_64: [os: :linux, cpu: :x86_64]"
+
+      # The module end must still be there and close everything cleanly.
+      assert {:ok, _ast} = Code.string_to_quoted(updated)
+    end
+
+    test "is idempotent" do
+      already = """
+      defmodule MyCli.MixProject do
+        use Mix.Project
+        defp releases do
+          []
+        end
+      end
+      """
+
+      {:ok, same, :already_present} =
+        ProjectEditor.insert_releases_block(already, :my_cli, [:darwin_arm64])
+
+      assert same == already
+    end
+  end
+
+  describe "insert_application_mod/2" do
+    test "adds mod: {App.Application, []} after extra_applications" do
+      {:ok, updated, :inserted} =
+        ProjectEditor.insert_application_mod(@mix_new_source, "MyCli")
+
+      assert updated =~ "extra_applications: [:logger],"
+      assert updated =~ "mod: {MyCli.Application, []}"
+      refute updated =~ ",,"
+    end
+
+    test "is idempotent when mod: is already present" do
+      already = """
+      def application do
+        [
+          extra_applications: [:logger],
+          mod: {MyCli.Application, []}
+        ]
+      end
+      """
+
+      {:ok, same, :already_present} =
+        ProjectEditor.insert_application_mod(already, "MyCli")
+
+      assert same == already
+    end
+  end
+
+  describe "full --install pipeline" do
+    test "applying every splicer produces a parseable mix.exs" do
+      targets = [:darwin_arm64, :linux_x86_64]
+
+      {:ok, s1, :inserted} = ProjectEditor.insert_tinfoil_dep(@mix_new_source, "0.2")
+      {:ok, s2, :inserted} = ProjectEditor.insert_burrito_dep(s1)
+      {:ok, s3, :inserted} = ProjectEditor.insert_tinfoil_config(s2, targets)
+      {:ok, s4, :inserted} = ProjectEditor.insert_releases_entry(s3)
+      {:ok, s5, :inserted} = ProjectEditor.insert_releases_block(s4, :my_cli, targets)
+      {:ok, final, :inserted} = ProjectEditor.insert_application_mod(s5, "MyCli")
+
+      assert {:ok, _ast} = Code.string_to_quoted(final)
+
+      assert final =~ ~s({:tinfoil, "~> 0.2", runtime: false})
+      assert final =~ ~s({:burrito, "~> 1.0"})
+      assert final =~ "releases: releases()"
+      assert final =~ "defp releases do"
+      assert final =~ "mod: {MyCli.Application, []}"
+      assert final =~ "tinfoil: ["
+    end
+
+    test "running the pipeline twice is a full no-op" do
+      targets = [:darwin_arm64]
+
+      {:ok, s1, _} = ProjectEditor.insert_tinfoil_dep(@mix_new_source, "0.2")
+      {:ok, s2, _} = ProjectEditor.insert_burrito_dep(s1)
+      {:ok, s3, _} = ProjectEditor.insert_tinfoil_config(s2, targets)
+      {:ok, s4, _} = ProjectEditor.insert_releases_entry(s3)
+      {:ok, s5, _} = ProjectEditor.insert_releases_block(s4, :my_cli, targets)
+      {:ok, first_pass, _} = ProjectEditor.insert_application_mod(s5, "MyCli")
+
+      # Second pass: every splicer should short-circuit as :already_present
+      assert {:ok, ^first_pass, :already_present} =
+               ProjectEditor.insert_tinfoil_dep(first_pass, "0.2")
+
+      assert {:ok, ^first_pass, :already_present} = ProjectEditor.insert_burrito_dep(first_pass)
+
+      assert {:ok, ^first_pass, :already_present} =
+               ProjectEditor.insert_tinfoil_config(first_pass, targets)
+
+      assert {:ok, ^first_pass, :already_present} =
+               ProjectEditor.insert_releases_entry(first_pass)
+
+      assert {:ok, ^first_pass, :already_present} =
+               ProjectEditor.insert_releases_block(first_pass, :my_cli, targets)
+
+      assert {:ok, ^first_pass, :already_present} =
+               ProjectEditor.insert_application_mod(first_pass, "MyCli")
     end
   end
 end

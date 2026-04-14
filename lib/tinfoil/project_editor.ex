@@ -1,20 +1,22 @@
 defmodule Tinfoil.ProjectEditor do
   @moduledoc """
-  Splice tinfoil's dep and config into a `mix.exs` that was produced
+  Splice tinfoil + Burrito wiring into a `mix.exs` that was produced
   by `mix new`. The edits are intentionally string-based (not AST
   rewrites) so user formatting, comments, and layout are preserved.
 
-  Anchors used:
+  The module exports one splicer per concern:
 
-    * `insert_dep/2` looks for `defp deps do\n    [` and injects the
-      tinfoil entry as the first list element.
-    * `insert_tinfoil_config/2` looks for `deps: deps()` inside
-      `project/0` and appends a `tinfoil: [ ... ]` entry after it.
+    * `insert_tinfoil_dep/2`       — `{:tinfoil, "~> X", runtime: false}`
+    * `insert_burrito_dep/1`       — `{:burrito, "~> 1.0"}`
+    * `insert_tinfoil_config/2`    — `tinfoil: [ targets: [...] ]` in `project/0`
+    * `insert_releases_entry/1`    — `releases: releases()` in `project/0`
+    * `insert_releases_block/2`    — `defp releases do ... end` function
+    * `insert_application_mod/2`   — `mod: {App.Application, []}` in `application/0`
 
-  Both functions are idempotent: if tinfoil is already present, the
+  Every splicer is idempotent: if the target is already present, the
   source is returned unchanged with an `:already_present` status.
 
-  If the expected anchors don't match -- typically because the user
+  If a splicer can't find its anchor -- typically because the user
   customized the file beyond the `mix new` shape -- the caller gets
   `{:error, reason}` and should print a snippet for manual paste
   rather than guessing.
@@ -22,28 +24,41 @@ defmodule Tinfoil.ProjectEditor do
 
   @type status :: :inserted | :already_present
 
+  @burrito_requirement "~> 1.0"
+
   @doc """
   Insert `{:tinfoil, "~> <version>", runtime: false}` as the first
   element of `deps/0`.
   """
+  @spec insert_tinfoil_dep(String.t(), String.t()) ::
+          {:ok, String.t(), status()} | {:error, :deps_anchor_not_found}
+  def insert_tinfoil_dep(source, tinfoil_version) do
+    insert_dep_if_missing(
+      source,
+      ~r/\{\s*:tinfoil\s*,/,
+      ~s({:tinfoil, "~> #{tinfoil_version}", runtime: false})
+    )
+  end
+
+  @doc """
+  Back-compat alias for `insert_tinfoil_dep/2`. Kept because earlier
+  callers used the shorter name.
+  """
   @spec insert_dep(String.t(), String.t()) ::
           {:ok, String.t(), status()} | {:error, :deps_anchor_not_found}
-  def insert_dep(source, tinfoil_version) do
-    if already_has_tinfoil_dep?(source) do
-      {:ok, source, :already_present}
-    else
-      # Capture the leading indentation of `[` so our injected entry lines up.
-      regex = ~r/(defp\s+deps\s+do\s*\n)([ \t]*)\[/
+  def insert_dep(source, tinfoil_version), do: insert_tinfoil_dep(source, tinfoil_version)
 
-      if Regex.match?(regex, source) do
-        entry = ~s({:tinfoil, "~> #{tinfoil_version}", runtime: false})
-        replacement = "\\1\\2[\n\\2  #{entry},"
-
-        {:ok, Regex.replace(regex, source, replacement, global: false), :inserted}
-      else
-        {:error, :deps_anchor_not_found}
-      end
-    end
+  @doc """
+  Insert `{:burrito, "~> 1.0"}` into `deps/0`.
+  """
+  @spec insert_burrito_dep(String.t()) ::
+          {:ok, String.t(), status()} | {:error, :deps_anchor_not_found}
+  def insert_burrito_dep(source) do
+    insert_dep_if_missing(
+      source,
+      ~r/\{\s*:burrito\s*,/,
+      ~s({:burrito, "#{@burrito_requirement}"})
+    )
   end
 
   @doc """
@@ -67,14 +82,115 @@ defmodule Tinfoil.ProjectEditor do
     end
   end
 
+  @doc """
+  Insert `releases: releases()` into `project/0` right after the
+  `deps: deps()` line.
+  """
+  @spec insert_releases_entry(String.t()) ::
+          {:ok, String.t(), status()} | {:error, :project_anchor_not_found}
+  def insert_releases_entry(source) do
+    if Regex.match?(~r/\breleases:\s*releases\(\)/, source) do
+      {:ok, source, :already_present}
+    else
+      regex = ~r/([ \t]*)deps:\s*deps\(\),?(\n)/
+
+      if Regex.match?(regex, source) do
+        {:ok, Regex.replace(regex, source, &add_releases_line/3), :inserted}
+      else
+        {:error, :project_anchor_not_found}
+      end
+    end
+  end
+
+  defp add_releases_line(_full, indent, newline) do
+    indent <> "deps: deps()," <> newline <> indent <> "releases: releases()," <> newline
+  end
+
+  @doc """
+  Append a `defp releases do ... end` function with a Burrito
+  `:targets` block for the given tinfoil targets. The function is
+  inserted at the bottom of the module, right before the final `end`.
+  The release name matches the app atom so `Tinfoil.Burrito.pick_release/2`
+  picks it by name.
+  """
+  @spec insert_releases_block(String.t(), atom(), [atom()]) ::
+          {:ok, String.t(), status()} | {:error, :module_end_not_found}
+  def insert_releases_block(source, app, targets)
+      when is_atom(app) and is_list(targets) and targets != [] do
+    # "defp releases" at any indent signals the block is already there.
+    if Regex.match?(~r/^\s*defp\s+releases\s+do/m, source) do
+      {:ok, source, :already_present}
+    else
+      # The module-level `end` is on its own line at column 0 at end-of-file,
+      # optionally followed by a trailing newline.
+      regex = ~r/\nend\s*\z/
+
+      if Regex.match?(regex, source) do
+        block = render_releases_block(app, targets)
+        {:ok, Regex.replace(regex, source, "\n" <> block <> "\nend\n", global: false), :inserted}
+      else
+        {:error, :module_end_not_found}
+      end
+    end
+  end
+
+  @doc """
+  Add `mod: {<app_module>.Application, []}` to the `application/0`
+  keyword list, right after the `extra_applications: [...]` line.
+  """
+  @spec insert_application_mod(String.t(), String.t()) ::
+          {:ok, String.t(), status()} | {:error, :application_anchor_not_found}
+  def insert_application_mod(source, app_module) when is_binary(app_module) do
+    if Regex.match?(~r/\bmod:\s*\{/, source) do
+      {:ok, source, :already_present}
+    else
+      regex = ~r/([ \t]*)extra_applications:\s*\[[^\]]*\](,?)(\n)/
+
+      if Regex.match?(regex, source) do
+        updated =
+          Regex.replace(regex, source, fn _full, indent, _comma, newline ->
+            [
+              indent,
+              "extra_applications: [:logger],",
+              newline,
+              indent,
+              "mod: {",
+              app_module,
+              ".Application, []}",
+              newline
+            ]
+            |> IO.iodata_to_binary()
+          end)
+
+        {:ok, updated, :inserted}
+      else
+        {:error, :application_anchor_not_found}
+      end
+    end
+  end
+
   ## ───────────────────── internals ─────────────────────
+
+  # Inject a single `{:name, ...}` entry as the first element of deps/0
+  # unless a matching entry is already present. Indentation of the
+  # existing `[` is preserved on the injected line.
+  defp insert_dep_if_missing(source, existing_regex, entry) do
+    if Regex.match?(existing_regex, source) do
+      {:ok, source, :already_present}
+    else
+      deps_regex = ~r/(defp\s+deps\s+do\s*\n)([ \t]*)\[/
+
+      if Regex.match?(deps_regex, source) do
+        replacement = "\\1\\2[\n\\2  #{entry},"
+        {:ok, Regex.replace(deps_regex, source, replacement, global: false), :inserted}
+      else
+        {:error, :deps_anchor_not_found}
+      end
+    end
+  end
 
   defp replace_deps_line(_full, indent, newline, targets) do
     indent <> "deps: deps()," <> newline <> render_config_block(targets, indent)
-  end
-
-  defp already_has_tinfoil_dep?(source) do
-    Regex.match?(~r/\{\s*:tinfoil\s*,/, source)
   end
 
   defp already_has_tinfoil_config?(source) do
@@ -86,6 +202,30 @@ defmodule Tinfoil.ProjectEditor do
     #{indent}tinfoil: [
     #{indent}  targets: #{inspect(targets, limit: :infinity)}
     #{indent}]
+    """
+  end
+
+  # Two-space indent matches what `mix new` uses for function bodies.
+  defp render_releases_block(app, targets) do
+    entries =
+      Enum.map_join(targets, ",\n", fn t ->
+        spec = Tinfoil.Target.spec!(t)
+        "          #{t}: [os: :#{spec.burrito_os}, cpu: :#{spec.burrito_cpu}]"
+      end)
+
+    """
+      defp releases do
+        [
+          #{app}: [
+            steps: [:assemble, &Burrito.wrap/1],
+            burrito: [
+              targets: [
+    #{entries}
+              ]
+            ]
+          ]
+        ]
+      end\
     """
   end
 end
