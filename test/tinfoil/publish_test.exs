@@ -194,6 +194,36 @@ defmodule Tinfoil.PublishTest do
     end
 
     @tag :tmp_dir
+    test "streams asset uploads with explicit content-length", %{tmp_dir: tmp} do
+      input = Path.join(tmp, "artifacts")
+      File.mkdir_p!(input)
+
+      # 200KB is larger than the 64KB streaming chunk, so the upload path
+      # must actually iterate the File.Stream rather than rely on a single read.
+      big_bytes = :crypto.strong_rand_bytes(200_000)
+      archive = Path.join(input, "my_cli-1.2.3-aarch64-apple-darwin.tar.gz")
+      File.write!(archive, big_bytes)
+      File.write!(archive <> ".sha256", "aaa  my_cli-1.2.3-aarch64-apple-darwin.tar.gz\n")
+
+      {:ok, _} =
+        Publish.publish(build_config(),
+          input_dir: input,
+          tag: "v1.2.3",
+          req: stub_req(self())
+        )
+
+      # Drop the release-creation request
+      assert_receive {:request, "POST", "/repos/owner/my_cli/releases", _, _, _}
+
+      # The large archive upload round-trips byte-for-byte and carries a
+      # content-length header matching the on-disk size.
+      assert_receive {:request, "POST", "/repos/owner/my_cli/releases/42/assets", _qs, ^big_bytes,
+                      headers}
+
+      assert {"content-length", "200000"} in headers
+    end
+
+    @tag :tmp_dir
     test "auto-detects prerelease tags like v1.0.0-rc.1", %{tmp_dir: tmp} do
       input = Path.join(tmp, "artifacts")
       File.mkdir_p!(input)

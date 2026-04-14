@@ -276,15 +276,23 @@ defmodule Tinfoil.Publish do
     end
   end
 
+  # 64KB chunks balance syscall overhead against memory footprint; the body
+  # is streamed so a multi-hundred-MB asset never sits in RAM as a single binary.
+  @upload_chunk_bytes 64 * 1024
+
   defp upload_one(req, upload_template, path) do
     name = Path.basename(path)
     upload_url = String.replace(upload_template, ~r/\{\?.*\}/, "")
-    body = File.read!(path)
+    size = File.stat!(path).size
+    body = File.stream!(path, @upload_chunk_bytes)
 
     case Req.post(req,
            url: upload_url,
            params: [name: name],
-           headers: [{"content-type", content_type(path)}],
+           headers: [
+             {"content-type", content_type(path)},
+             {"content-length", Integer.to_string(size)}
+           ],
            body: body
          ) do
       {:ok, %Req.Response{status: status}} when status in 200..299 ->
