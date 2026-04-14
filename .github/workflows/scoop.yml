@@ -87,6 +87,11 @@ jobs:
         run: |
           Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
           Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
+          # Scoop installs into ~/scoop and appends ~/scoop/shims to the
+          # user PATH via the registry. GitHub Actions steps spawn new
+          # shells that don't inherit that, so forward it explicitly via
+          # $GITHUB_PATH for subsequent steps.
+          "$env:USERPROFILE\scoop\shims" | Out-File -Encoding utf8 -Append $env:GITHUB_PATH
 
       - name: Add the local bucket and install
         shell: pwsh
