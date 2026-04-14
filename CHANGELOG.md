@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.10](https://github.com/joshrotenberg/tinfoil/compare/v0.2.9...v0.2.10) (2026-04-14)
+
+
+### Bug Fixes
+
+* install.sh verifies via checksums-sha256.txt, not per-archive sidecars ([#56](https://github.com/joshrotenberg/tinfoil/issues/56)) ([55ebf75](https://github.com/joshrotenberg/tinfoil/commit/55ebf7575f04d87eee124f8ec0331ce62d0e0b9e))
+
 ## [0.2.9](https://github.com/joshrotenberg/tinfoil/compare/v0.2.8...v0.2.9) (2026-04-14)
 
 
