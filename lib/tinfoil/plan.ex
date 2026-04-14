@@ -40,8 +40,10 @@ defmodule Tinfoil.Plan do
           checksums: atom(),
           targets: [target_plan()],
           single_runner_per_os: boolean(),
+          attestations: boolean(),
           github: map(),
           homebrew: map(),
+          scoop: map(),
           installer: map()
         }
 
@@ -59,8 +61,10 @@ defmodule Tinfoil.Plan do
       checksums: config.checksums,
       targets: Enum.map(config.targets, &target_plan(&1, config)),
       single_runner_per_os: config.single_runner_per_os,
+      attestations: config.attestations,
       github: config.github,
       homebrew: config.homebrew,
+      scoop: config.scoop,
       installer: config.installer
     }
   end
