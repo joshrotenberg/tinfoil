@@ -451,5 +451,40 @@ defmodule Tinfoil.ConfigTest do
         )
       end
     end
+
+    test ":missing_releases error includes a paste-ready snippet" do
+      project =
+        base_project(targets: [:darwin_arm64])
+        |> Keyword.delete(:releases)
+
+      msg =
+        try do
+          Config.load!(project)
+        rescue
+          e in ArgumentError -> Exception.message(e)
+        end
+
+      assert msg =~ "no :releases block"
+      assert msg =~ "mix tinfoil.init --install"
+      assert msg =~ "Burrito.wrap"
+      assert msg =~ "darwin_arm64: [os: :darwin, cpu: :aarch64]"
+    end
+
+    test ":missing_burrito_in_release error shows the burrito block shape" do
+      project =
+        base_project([targets: [:darwin_arm64]],
+          releases: [my_cli: []]
+        )
+
+      msg =
+        try do
+          Config.load!(project)
+        rescue
+          e in ArgumentError -> Exception.message(e)
+        end
+
+      assert msg =~ "no :burrito key"
+      assert msg =~ "Burrito.wrap" or msg =~ "burrito: ["
+    end
   end
 end

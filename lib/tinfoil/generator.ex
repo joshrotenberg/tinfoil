@@ -152,6 +152,47 @@ defmodule Tinfoil.Generator do
     eval("install.sh.eex", assigns)
   end
 
+  @doc """
+  Render the `lib/<app>/application.ex` boilerplate used by
+  `mix tinfoil.init --install`. Not part of `render/1` because this
+  is a one-time scaffolding artifact, not something to regenerate on
+  every `mix tinfoil.generate`.
+  """
+  @spec render_application(atom()) :: String.t()
+  def render_application(app) when is_atom(app) do
+    assigns = [
+      app: app,
+      app_module: app_module(app)
+    ]
+
+    eval("application.ex.eex", assigns)
+  end
+
+  @doc """
+  Render a stub `lib/<app>/cli.ex` that `<App>.Application.start/2`
+  calls. Gives a fresh project something runnable before the user
+  writes their real command tree.
+  """
+  @spec render_cli(atom()) :: String.t()
+  def render_cli(app) when is_atom(app) do
+    assigns = [
+      app: app,
+      app_module: app_module(app)
+    ]
+
+    eval("cli.ex.eex", assigns)
+  end
+
+  @doc """
+  Return the CamelCase module name for an app atom (`:my_cli` -> `"MyCli"`).
+  """
+  @spec app_module(atom()) :: String.t()
+  def app_module(app) when is_atom(app) do
+    app
+    |> Atom.to_string()
+    |> Macro.camelize()
+  end
+
   ## ───────────── internals ─────────────
 
   defp eval(name, assigns) do

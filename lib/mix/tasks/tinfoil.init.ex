@@ -73,10 +73,10 @@ defmodule Mix.Tasks.Tinfoil.Init do
     end
   end
 
-  # Splice the tinfoil dep and :tinfoil config into mix.exs, then
-  # re-fetch deps. The edits are atomic: if either splice can't find
-  # its anchor, the file is left untouched and we fall back to the
-  # manual snippet.
+  # Splice the tinfoil dep, Burrito dep + releases block, :tinfoil
+  # config, and Application callback module into mix.exs (and the
+  # filesystem), then re-fetch deps. Each splice is idempotent, so
+  # re-running `--install` only fills in what's missing.
   defp install_into_mix_exs do
     path = "mix.exs"
 
@@ -84,20 +84,50 @@ defmodule Mix.Tasks.Tinfoil.Init do
       Mix.raise("mix.exs not found in #{File.cwd!()}")
     end
 
+    project = Mix.Project.config()
+    app = Keyword.fetch!(project, :app)
+    app_module = Generator.app_module(app)
+    targets = default_targets()
+
     source = File.read!(path)
 
-    with {:ok, with_dep, dep_status} <-
-           ProjectEditor.insert_dep(source, tinfoil_version()),
-         {:ok, with_config, config_status} <-
-           ProjectEditor.insert_tinfoil_config(with_dep, default_targets()) do
-      if source == with_config do
-        Mix.shell().info("mix.exs already references tinfoil; nothing to do")
-      else
-        File.write!(path, with_config)
-        report_install(dep_status, config_status)
-        Mix.shell().info([:cyan, "* running mix deps.get", :reset])
+    with {:ok, s1, s_tinfoil} <- ProjectEditor.insert_tinfoil_dep(source, tinfoil_version()),
+         {:ok, s2, s_burrito} <- ProjectEditor.insert_burrito_dep(s1),
+         {:ok, s3, s_config} <- ProjectEditor.insert_tinfoil_config(s2, targets),
+         {:ok, s4, s_rel_entry} <- ProjectEditor.insert_releases_entry(s3),
+         {:ok, s5, s_rel_block} <- ProjectEditor.insert_releases_block(s4, app, targets),
+         {:ok, new_source, s_app_mod} <-
+           ProjectEditor.insert_application_mod(s5, app_module) do
+      changed = new_source != source
+
+      if changed do
+        File.write!(path, new_source)
+      end
+
+      application_status =
+        write_scaffold_file(app, "application.ex", &Generator.render_application/1)
+
+      cli_status = write_scaffold_file(app, "cli.ex", &Generator.render_cli/1)
+
+      statuses = [
+        {"tinfoil dep", s_tinfoil},
+        {"burrito dep", s_burrito},
+        {"tinfoil config", s_config},
+        {"releases entry", s_rel_entry},
+        {"releases block", s_rel_block},
+        {"application mod", s_app_mod},
+        {"application.ex", application_status},
+        {"cli.ex", cli_status}
+      ]
+
+      report_install(statuses)
+
+      if changed or application_status == :inserted or cli_status == :inserted do
+        Mix.shell().info([:cyan, "\n* running mix deps.get", :reset])
         Mix.Task.run("deps.get")
         Mix.shell().info([:cyan, "\nNow re-run ", :reset, "mix tinfoil.init"])
+      else
+        Mix.shell().info("mix.exs already fully scaffolded; nothing to do")
       end
     else
       {:error, reason} ->
@@ -111,17 +141,27 @@ defmodule Mix.Tasks.Tinfoil.Init do
     end
   end
 
-  defp report_install(dep_status, config_status) do
-    Mix.shell().info([
-      :green,
-      "* dep: ",
-      :reset,
-      to_string(dep_status),
-      :green,
-      "  * config: ",
-      :reset,
-      to_string(config_status)
-    ])
+  # Write a scaffolding file under lib/<app>/ if it doesn't already
+  # exist. Never overwrites — a user who's customized the file should
+  # keep their version, and re-running `--install` shouldn't clobber
+  # hand edits.
+  defp write_scaffold_file(app, filename, renderer) do
+    relative = Path.join(["lib", to_string(app), filename])
+
+    if File.exists?(relative) do
+      :already_present
+    else
+      File.mkdir_p!(Path.dirname(relative))
+      File.write!(relative, renderer.(app))
+      :inserted
+    end
+  end
+
+  defp report_install(statuses) do
+    Enum.each(statuses, fn {label, status} ->
+      color = if status == :inserted, do: :green, else: :yellow
+      Mix.shell().info([color, "* #{label}: ", :reset, to_string(status)])
+    end)
   end
 
   defp tinfoil_version do

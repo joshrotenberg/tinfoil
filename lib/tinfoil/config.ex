@@ -450,30 +450,63 @@ defmodule Tinfoil.Config do
   defp format_error(:release_opts_not_keyword_list),
     do: "the selected release's options block is not a keyword list"
 
-  defp format_error(:missing_releases),
-    do:
-      "no :releases block found in mix.exs — tinfoil requires a Burrito " <>
-        "release config. See https://github.com/burrito-elixir/burrito#usage"
+  defp format_error(:missing_releases) do
+    """
+    no :releases block found in mix.exs. tinfoil needs a Burrito release config to
+    know what to build. Either run
+
+        mix tinfoil.init --install
+
+    to scaffold one, or paste something like:
+
+    #{burrito_snippet()}
+    """
+  end
 
   defp format_error(:releases_empty_or_invalid),
     do: ":releases must be a non-empty keyword list of release configurations"
 
-  defp format_error(:missing_burrito_in_release),
-    do:
-      "the selected release has no :burrito key — add a " <>
-        "burrito: [targets: [...]] block inside the release options"
+  defp format_error(:missing_burrito_in_release) do
+    """
+    the selected release has no :burrito key. Add a burrito: [...] block inside
+    the release options, e.g.
+
+    #{burrito_snippet()}
+    """
+  end
 
   defp format_error(:burrito_not_keyword_list),
     do: ":burrito must be a keyword list"
 
-  defp format_error(:missing_burrito_targets),
-    do: ":burrito block has no :targets list"
+  defp format_error(:missing_burrito_targets) do
+    """
+    :burrito block has no :targets list. Each tinfoil target needs a matching
+    Burrito entry, e.g.
+
+        burrito: [
+          targets: [
+            darwin_arm64: [os: :darwin, cpu: :aarch64],
+            linux_x86_64: [os: :linux, cpu: :x86_64]
+          ]
+        ]
+    """
+  end
 
   defp format_error(:burrito_targets_empty_or_invalid),
     do: ":burrito :targets must be a non-empty keyword list"
 
-  defp format_error(:burrito_targets_malformed),
-    do: ":burrito :targets entries must be `name: [os: atom, cpu: atom]`"
+  defp format_error(:burrito_targets_malformed) do
+    """
+    :burrito :targets entries must be `name: [os: atom, cpu: atom]`. Example:
+
+        burrito: [
+          targets: [
+            darwin_arm64: [os: :darwin, cpu: :aarch64],
+            linux_x86_64: [os: :linux, cpu: :x86_64]
+          ]
+        ]
+    """
+  end
 
   defp format_error({:invalid_burrito_target, name}),
     do:
@@ -515,4 +548,22 @@ defmodule Tinfoil.Config do
       ":tinfoil :prerelease_pattern must be a Regex (e.g. ~r/-(rc|beta)/), got: #{inspect(value)}"
 
   defp format_error(other), do: "invalid tinfoil config: #{inspect(other)}"
+
+  defp burrito_snippet do
+    """
+        releases: [
+          my_cli: [
+            steps: [:assemble, &Burrito.wrap/1],
+            burrito: [
+              targets: [
+                darwin_arm64: [os: :darwin, cpu: :aarch64],
+                darwin_x86_64: [os: :darwin, cpu: :x86_64],
+                linux_x86_64:  [os: :linux,  cpu: :x86_64],
+                linux_arm64:   [os: :linux,  cpu: :aarch64]
+              ]
+            ]
+          ]
+        ]\
+    """
+  end
 end

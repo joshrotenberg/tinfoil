@@ -273,6 +273,25 @@ defmodule Tinfoil.GeneratorTest do
     end
   end
 
+  describe "application rendering" do
+    test "renders an Application module matching the app atom" do
+      code = Generator.render_application(:my_cli)
+
+      assert code =~ "defmodule MyCli.Application do"
+      assert code =~ "Burrito.Util.running_standalone?()"
+      assert code =~ "MyCli.CLI.run(argv)"
+      assert code =~ "System.halt(0)"
+      # Must be parseable Elixir.
+      assert {:ok, _ast} = Code.string_to_quoted(code)
+    end
+
+    test "snake_case app atoms become CamelCase module prefixes" do
+      assert Generator.app_module(:my_cli) == "MyCli"
+      assert Generator.app_module(:cool_app) == "CoolApp"
+      assert Generator.app_module(:single) == "Single"
+    end
+  end
+
   describe "installer rendering" do
     test "renders install.sh referencing the configured repo" do
       sh =
