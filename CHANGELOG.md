@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.9](https://github.com/joshrotenberg/tinfoil/compare/v0.2.8...v0.2.9) (2026-04-14)
+
+
+### Features
+
+* configurable secret names for Homebrew auth ([#52](https://github.com/joshrotenberg/tinfoil/issues/52)) ([512c7d2](https://github.com/joshrotenberg/tinfoil/commit/512c7d2fd68303479f9ac8656d1c71dee68d4093))
+
+
+### Bug Fixes
+
+* mix tinfoil.init crashes when --install flag is absent ([#51](https://github.com/joshrotenberg/tinfoil/issues/51)) ([6ef0fd9](https://github.com/joshrotenberg/tinfoil/commit/6ef0fd9ed4a299201c9e538729825a04d0bd66bb))
+
 ## [0.2.8](https://github.com/joshrotenberg/tinfoil/compare/v0.2.7...v0.2.8) (2026-04-14)
 
 
