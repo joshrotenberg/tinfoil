@@ -62,7 +62,7 @@ defmodule Tinfoil.MixProject do
         "Changelog" => "#{@source_url}/blob/main/CHANGELOG.md",
         "Hex" => "https://hex.pm/packages/tinfoil"
       },
-      files: ~w(lib priv/templates mix.exs README.md LICENSE CHANGELOG.md)
+      files: ~w(lib priv/templates mix.exs README.md LICENSE CHANGELOG.md docs)
     ]
   end
 
@@ -73,7 +73,16 @@ defmodule Tinfoil.MixProject do
       source_url: @source_url,
       extras: [
         "README.md",
+        "docs/getting_started.md": [title: "Getting started"],
+        "docs/configuration.md": [title: "Configuration"],
+        "docs/targets.md": [title: "Targets and runners"],
+        "docs/distribution.md": [title: "Distribution"],
+        "docs/release_please.md": [title: "Automatic releases with release-please"],
+        "docs/mix_tasks.md": [title: "Mix tasks"],
         "CHANGELOG.md": [title: "Changelog"]
+      ],
+      groups_for_extras: [
+        Guides: ~r"docs/.*"
       ],
       groups_for_modules: [
         "Public API": [
