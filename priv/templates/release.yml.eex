@@ -115,7 +115,6 @@ jobs:
     name: Update Homebrew tap
     needs: release
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.ref_name, '-rc') && !contains(github.ref_name, '-beta') && !contains(github.ref_name, '-alpha') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -150,7 +149,6 @@ jobs:
     name: Update Scoop bucket
     needs: release
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.ref_name, '-rc') && !contains(github.ref_name, '-beta') && !contains(github.ref_name, '-alpha') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5

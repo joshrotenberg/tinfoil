@@ -29,11 +29,13 @@ defmodule Tinfoil.Scoop do
           git: module()
         ]
 
-  @type result :: %{
-          pushed: boolean(),
-          manifest_path: Path.t(),
-          commit_sha: String.t() | nil
-        }
+  @type result ::
+          %{
+            pushed: boolean(),
+            manifest_path: Path.t(),
+            commit_sha: String.t() | nil
+          }
+          | %{pushed: false, skipped: :prerelease}
 
   @type preview :: %{
           dry_run: true,
@@ -50,8 +52,10 @@ defmodule Tinfoil.Scoop do
 
     * `:scoop_not_enabled` -- config has `scoop.enabled: false`
     * `:missing_tag` -- no tag and `GITHUB_REF_NAME` is unset
-    * `:missing_scoop_bucket_token` -- `auth: :token` but
-      `SCOOP_BUCKET_TOKEN` (or the configured token_secret) is missing
+    * `:missing_scoop_bucket_token` -- `auth: :token` but the
+      `SCOOP_BUCKET_TOKEN` env var is missing. (The `token_secret`
+      config only renames the *workflow* secret; the task always reads
+      `SCOOP_BUCKET_TOKEN`, which the generated workflow maps it to.)
     * `:missing_windows_target` -- windows_x86_64 isn't in :targets,
       so there's nothing to publish
     * `{:missing_sha_sidecar, target, path}` -- the sha sidecar for
@@ -82,28 +86,47 @@ defmodule Tinfoil.Scoop do
       Keyword.get(opts, :dry_run, false) ->
         dry_run(config, opts)
 
+      prerelease_tag?(config, opts) ->
+        {:ok, %{pushed: false, skipped: :prerelease}}
+
       true ->
         do_publish(config, opts)
+    end
+  end
+
+  # A prerelease tag (per the configured `prerelease_pattern`) should
+  # not push a stable Scoop manifest. When no tag is resolvable yet, we
+  # don't treat it as a prerelease -- `do_publish` surfaces `:missing_tag`.
+  defp prerelease_tag?(config, opts) do
+    case fetch_tag(opts) do
+      {:ok, tag} -> Config.prerelease?(tag, config.prerelease_pattern)
+      {:error, _} -> false
     end
   end
 
   defp do_publish(config, opts) do
     git = Keyword.get(opts, :git, Tinfoil.Homebrew.Git)
     input_dir = Keyword.get(opts, :input_dir, "artifacts")
+    {bucket_dir, ephemeral?} = resolve_bucket_dir(opts)
 
-    with {:ok, tag} <- fetch_tag(opts),
-         version = String.trim_leading(tag, "v"),
-         {:ok, sha} <- read_windows_sha(input_dir, config),
-         {:ok, manifest} <- render_manifest(config, version, sha),
-         {:ok, bucket_dir} <- ensure_bucket_dir(opts),
-         {:ok, clone_url} <- build_clone_url(config.scoop),
-         :ok <- git.clone(clone_url, bucket_dir),
-         manifest_path = Path.join(bucket_dir, "#{config.scoop.manifest_name}.json"),
-         :ok <- write_manifest(manifest_path, manifest),
-         :ok <- git.config_identity(bucket_dir, @default_author_name, @default_author_email),
-         {:ok, commit_sha} <-
-           maybe_commit_and_push(git, bucket_dir, manifest_path, config, version) do
-      {:ok, %{pushed: commit_sha != nil, manifest_path: manifest_path, commit_sha: commit_sha}}
+    try do
+      with {:ok, tag} <- fetch_tag(opts),
+           version = String.trim_leading(tag, "v"),
+           {:ok, sha} <- read_windows_sha(input_dir, config),
+           {:ok, manifest} <- render_manifest(config, version, sha),
+           {:ok, clone_url} <- build_clone_url(config.scoop),
+           :ok <- git.clone(clone_url, bucket_dir),
+           manifest_path = Path.join(bucket_dir, "#{config.scoop.manifest_name}.json"),
+           :ok <- write_manifest(manifest_path, manifest),
+           :ok <- git.config_identity(bucket_dir, @default_author_name, @default_author_email),
+           {:ok, commit_sha} <-
+             maybe_commit_and_push(git, bucket_dir, manifest_path, config, version) do
+        {:ok, %{pushed: commit_sha != nil, manifest_path: manifest_path, commit_sha: commit_sha}}
+      end
+    after
+      # Only clean up a dir we created ourselves; a caller-supplied
+      # `:bucket_dir` is left intact for inspection.
+      if ephemeral?, do: File.rm_rf(bucket_dir)
     end
   end
 
@@ -175,16 +198,19 @@ defmodule Tinfoil.Scoop do
     {:ok, Tinfoil.Generator.render_scoop(assigns)}
   end
 
-  defp ensure_bucket_dir(opts) do
+  # Returns `{dir, ephemeral?}`. An auto-created temp dir is ephemeral
+  # and gets removed after publishing; a caller-supplied `:bucket_dir`
+  # is not (the caller owns its lifecycle).
+  defp resolve_bucket_dir(opts) do
     case Keyword.get(opts, :bucket_dir) do
       nil ->
         tmp = Path.join(System.tmp_dir!(), "tinfoil-bucket-#{System.unique_integer([:positive])}")
         File.mkdir_p!(tmp)
-        {:ok, tmp}
+        {tmp, true}
 
       path ->
         File.mkdir_p!(path)
-        {:ok, path}
+        {path, false}
     end
   end
 

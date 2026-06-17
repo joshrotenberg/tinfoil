@@ -146,6 +146,7 @@ defmodule Mix.Tasks.Tinfoil.Plan do
       "format:    #{plan.archive_format} (#{plan.checksums})",
       "github:    #{github_line(plan.github)}",
       "homebrew:  #{homebrew_line(plan.homebrew)}",
+      "scoop:     #{scoop_line(plan.scoop)}",
       "installer: #{installer_line(plan.installer)}"
     ]
     |> Enum.map_join("\n", &("  " <> &1))
@@ -158,6 +159,12 @@ defmodule Mix.Tasks.Tinfoil.Plan do
 
   defp homebrew_line(%{enabled: true, tap: tap, formula_name: name}) do
     "tap #{tap || "(unset)"} (formula: #{name})"
+  end
+
+  defp scoop_line(%{enabled: false}), do: "disabled"
+
+  defp scoop_line(%{enabled: true, bucket: bucket, manifest_name: name}) do
+    "bucket #{bucket || "(unset)"} (manifest: #{name})"
   end
 
   defp installer_line(%{enabled: false}), do: "disabled"

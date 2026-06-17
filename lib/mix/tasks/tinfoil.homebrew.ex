@@ -53,6 +53,9 @@ defmodule Mix.Tasks.Tinfoil.Homebrew do
       {:ok, %{dry_run: true} = preview} ->
         report_preview(preview)
 
+      {:ok, %{skipped: :prerelease}} ->
+        Mix.shell().info("skipping Homebrew formula update for prerelease tag #{tag(opts)}")
+
       {:ok, %{pushed: false}} ->
         Mix.shell().info("formula unchanged; nothing to push")
 
@@ -66,9 +69,34 @@ defmodule Mix.Tasks.Tinfoil.Homebrew do
         ])
 
       {:error, reason} ->
-        Mix.raise("homebrew publish failed: #{inspect(reason)}")
+        Mix.raise("homebrew publish failed: #{format_error(reason)}")
     end
   end
+
+  defp tag(opts), do: Keyword.get(opts, :tag) || System.get_env("GITHUB_REF_NAME") || "(unknown)"
+
+  defp format_error(:missing_tag),
+    do: "no tag given (--tag) and GITHUB_REF_NAME is not set"
+
+  defp format_error(:missing_homebrew_tap_token),
+    do: "homebrew.auth is :token but HOMEBREW_TAP_TOKEN is not set"
+
+  defp format_error({:missing_sha_sidecar, target, path}),
+    do: "missing #{target} checksum sidecar: #{path} (was the build artifact uploaded?)"
+
+  defp format_error(:malformed_sha_sidecar),
+    do: "a .sha256 sidecar did not contain a 64-character hex digest"
+
+  defp format_error({:missing_formula_template, path}),
+    do: "formula template not found at #{path} (run `mix tinfoil.generate`?)"
+
+  defp format_error({:formula_template_read_error, path, reason}),
+    do: "could not read formula template #{path}: #{inspect(reason)}"
+
+  defp format_error({:git_failed, args, status, output}),
+    do: "git #{Enum.join(args, " ")} exited #{status}: #{String.trim(output)}"
+
+  defp format_error(other), do: inspect(other)
 
   defp report_preview(preview) do
     Mix.shell().info([:cyan, "tinfoil homebrew (dry-run)\n", :reset])

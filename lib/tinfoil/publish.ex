@@ -74,6 +74,12 @@ defmodule Tinfoil.Publish do
       `--replace` failed
     * `{:upload_failed, name, status, body}` -- asset upload returned
       non-2xx
+    * `{:create_release_error, reason}` -- transport failure (no HTTP
+      response) while creating the release
+    * `{:find_release_error, reason}` -- transport failure while
+      looking up the existing release during `--replace`
+    * `{:delete_release_error, reason}` -- transport failure while
+      deleting the existing release during `--replace`
     * `{:upload_error, name, reason}` -- asset upload transport failure
     * `"... :github :repo is unresolved ..."` (string) -- the tinfoil
       `github.repo` config isn't set and couldn't be inferred from git
@@ -87,6 +93,9 @@ defmodule Tinfoil.Publish do
           | {:find_release_failed, non_neg_integer(), term()}
           | {:delete_release_failed, non_neg_integer(), term()}
           | {:upload_failed, String.t(), non_neg_integer(), term()}
+          | {:create_release_error, term()}
+          | {:find_release_error, term()}
+          | {:delete_release_error, term()}
           | {:upload_error, String.t(), term()}
           | String.t()
 
@@ -423,9 +432,7 @@ defmodule Tinfoil.Publish do
 
   @doc false
   @spec prerelease?(String.t(), Regex.t()) :: boolean()
-  def prerelease?(tag, %Regex{} = pattern) do
-    tag =~ pattern
-  end
+  defdelegate prerelease?(tag, pattern), to: Config
 
   defp tinfoil_version do
     case Application.spec(:tinfoil, :vsn) do

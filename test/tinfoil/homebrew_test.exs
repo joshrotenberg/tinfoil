@@ -174,6 +174,36 @@ defmodule Tinfoil.HomebrewTest do
       assert :push in calls
     end
 
+    test "skips publishing on a prerelease tag and touches no git", %{tmp_dir: tmp} do
+      System.put_env("HOMEBREW_TAP_TOKEN", "fake-token")
+
+      assert {:ok, %{pushed: false, skipped: :prerelease}} =
+               Homebrew.publish(build_config(),
+                 input_dir: Path.join(tmp, "artifacts"),
+                 tag: "v1.2.3-rc.1",
+                 tap_dir: Path.join(tmp, "tap"),
+                 git: GitStub
+               )
+
+      # Short-circuits before cloning, so no artifacts/template are read.
+      assert GitStub.calls() == []
+    end
+
+    test "honors a custom prerelease_pattern when deciding to skip", %{tmp_dir: tmp} do
+      System.put_env("HOMEBREW_TAP_TOKEN", "fake-token")
+      config = build_config(prerelease_pattern: ~r/-(dev|nightly)/)
+
+      assert {:ok, %{skipped: :prerelease}} =
+               Homebrew.publish(config,
+                 input_dir: Path.join(tmp, "artifacts"),
+                 tag: "v1.2.3-dev",
+                 tap_dir: Path.join(tmp, "tap"),
+                 git: GitStub
+               )
+
+      assert GitStub.calls() == []
+    end
+
     test "returns pushed: false when nothing changed", %{tmp_dir: tmp} do
       write_formula_template(tmp)
 
