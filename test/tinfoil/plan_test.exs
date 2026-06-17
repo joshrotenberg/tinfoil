@@ -253,7 +253,20 @@ defmodule Tinfoil.PlanTest do
         |> Mix.Tasks.Tinfoil.Plan.render_human()
 
       assert out =~ "homebrew:  disabled"
+      assert out =~ "scoop:     disabled"
       assert out =~ "installer: disabled"
+    end
+
+    test "shows bucket info when scoop is enabled" do
+      out =
+        build_config(
+          scoop: [enabled: true, bucket: "owner/scoop-bucket", manifest_name: "my_cli"]
+        )
+        |> Plan.build()
+        |> Mix.Tasks.Tinfoil.Plan.render_human()
+
+      assert out =~ "scoop:     bucket owner/scoop-bucket"
+      assert out =~ "manifest: my_cli"
     end
 
     test "shows tap info when homebrew is enabled" do
