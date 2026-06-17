@@ -24,7 +24,11 @@ on:
 jobs:
   smoke:
     name: scoop install from a rendered manifest
-    runs-on: windows-latest
+    # Pinned: windows-latest now resolves to the win25-vs2026 image,
+    # whose ImageOS value erlef/setup-beam@v1 can't map (it expects
+    # win22/win25). windows-2022 reports win22, which setup-beam
+    # supports. Revisit once setup-beam handles the newer image.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v5
 
