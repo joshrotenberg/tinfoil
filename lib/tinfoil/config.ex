@@ -177,6 +177,22 @@ defmodule Tinfoil.Config do
     archive_basename(config, target) <> archive_extension(config, target)
   end
 
+  @doc """
+  Return `true` when `tag` matches the configured prerelease `pattern`.
+
+  This is the single source of truth for prerelease detection. The
+  release-publish step uses it to mark the GitHub Release as a
+  prerelease, and the Homebrew/Scoop steps use it to decide whether
+  to skip publishing a package on a prerelease tag. Keeping the rule
+  here (rather than duplicating it as hardcoded `-rc`/`-beta`/`-alpha`
+  checks in the generated workflow YAML) means a custom
+  `prerelease_pattern` is honored everywhere.
+  """
+  @spec prerelease?(String.t(), Regex.t()) :: boolean()
+  def prerelease?(tag, %Regex{} = pattern) when is_binary(tag) do
+    tag =~ pattern
+  end
+
   ## ───────────────────── internals ─────────────────────
 
   defp fetch_tinfoil(project) do

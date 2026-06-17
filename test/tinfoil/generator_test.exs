@@ -154,6 +154,24 @@ defmodule Tinfoil.GeneratorTest do
       assert yaml =~ "mix tinfoil.scoop --input-dir artifacts"
     end
 
+    test "package jobs carry no hardcoded prerelease guard (honored by the task instead)" do
+      yaml =
+        build_config(
+          homebrew: [enabled: true, tap: "owner/homebrew-tap"],
+          scoop: [enabled: true, bucket: "owner/scoop-bucket", manifest_name: "my_cli"]
+        )
+        |> Generator.render_workflow()
+
+      # The prerelease decision now lives in mix tinfoil.homebrew/scoop,
+      # which consults the configured :prerelease_pattern. A static
+      # `if: !contains(github.ref_name, '-rc')` guard would silently
+      # ignore a custom pattern, so it must not be regenerated.
+      refute yaml =~ "contains(github.ref_name"
+      refute yaml =~ "-rc"
+      refute yaml =~ "-beta"
+      refute yaml =~ "-alpha"
+    end
+
     test "workflow omits scoop job when scoop is disabled" do
       yaml = build_config() |> Generator.render_workflow()
 

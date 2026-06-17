@@ -54,6 +54,9 @@ defmodule Mix.Tasks.Tinfoil.Scoop do
       {:ok, %{dry_run: true} = preview} ->
         report_preview(preview)
 
+      {:ok, %{skipped: :prerelease}} ->
+        Mix.shell().info("skipping Scoop manifest update for prerelease tag #{tag(opts)}")
+
       {:ok, %{pushed: false}} ->
         Mix.shell().info("manifest unchanged; nothing to push")
 
@@ -67,9 +70,31 @@ defmodule Mix.Tasks.Tinfoil.Scoop do
         ])
 
       {:error, reason} ->
-        Mix.raise("scoop publish failed: #{inspect(reason)}")
+        Mix.raise("scoop publish failed: #{format_error(reason)}")
     end
   end
+
+  defp tag(opts), do: Keyword.get(opts, :tag) || System.get_env("GITHUB_REF_NAME") || "(unknown)"
+
+  defp format_error(:missing_tag),
+    do: "no tag given (--tag) and GITHUB_REF_NAME is not set"
+
+  defp format_error(:missing_scoop_bucket_token),
+    do: "scoop.auth is :token but SCOOP_BUCKET_TOKEN is not set"
+
+  defp format_error(:missing_windows_target),
+    do: "scoop requires :windows_x86_64 in :targets, but it is not configured"
+
+  defp format_error({:missing_sha_sidecar, target, path}),
+    do: "missing #{target} checksum sidecar: #{path} (was the build artifact uploaded?)"
+
+  defp format_error(:malformed_sha_sidecar),
+    do: "a .sha256 sidecar did not contain a 64-character hex digest"
+
+  defp format_error({:git_failed, args, status, output}),
+    do: "git #{Enum.join(args, " ")} exited #{status}: #{String.trim(output)}"
+
+  defp format_error(other), do: inspect(other)
 
   defp report_preview(preview) do
     Mix.shell().info([:cyan, "tinfoil scoop (dry-run)\n", :reset])

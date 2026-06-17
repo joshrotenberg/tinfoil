@@ -144,5 +144,21 @@ defmodule Mix.Tasks.Tinfoil.Publish do
   defp format_error({:upload_failed, name, status, body}),
     do: "upload of #{name} failed (HTTP #{status}): #{inspect(body)}"
 
+  defp format_error({:create_release_error, reason}),
+    do: "network error while creating the release: #{inspect(reason)}"
+
+  defp format_error({:find_release_error, reason}),
+    do:
+      "network error while looking up the existing release during --replace: " <>
+        inspect(reason)
+
+  defp format_error({:delete_release_error, reason}),
+    do:
+      "network error while deleting the existing release during --replace: " <>
+        inspect(reason)
+
+  defp format_error({:upload_error, name, reason}),
+    do: "network error while uploading #{name}: #{inspect(reason)}"
+
   defp format_error(other), do: inspect(other)
 end
