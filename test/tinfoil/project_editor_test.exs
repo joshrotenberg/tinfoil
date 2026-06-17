@@ -236,6 +236,44 @@ defmodule Tinfoil.ProjectEditorTest do
     end
   end
 
+  describe "anchor-not-found error paths" do
+    test "insert_burrito_dep returns an error without a deps/0 anchor" do
+      weird = """
+      defmodule Weird do
+        def deps_from_config, do: []
+      end
+      """
+
+      assert {:error, :deps_anchor_not_found} = ProjectEditor.insert_burrito_dep(weird)
+    end
+
+    test "insert_releases_entry returns an error without a deps: deps() anchor" do
+      weird = "def project, do: [app: :weird]"
+
+      assert {:error, :project_anchor_not_found} =
+               ProjectEditor.insert_releases_entry(weird)
+    end
+
+    test "insert_releases_block returns an error without a module-end anchor" do
+      # No trailing `\nend` for the splicer to anchor on.
+      weird = "defmodule Weird do def project, do: [] end"
+
+      assert {:error, :module_end_not_found} =
+               ProjectEditor.insert_releases_block(weird, :my_cli, [:darwin_arm64])
+    end
+
+    test "insert_application_mod returns an error without an extra_applications anchor" do
+      weird = """
+      def application do
+        []
+      end
+      """
+
+      assert {:error, :application_anchor_not_found} =
+               ProjectEditor.insert_application_mod(weird, "MyCli")
+    end
+  end
+
   describe "full --install pipeline" do
     test "applying every splicer produces a parseable mix.exs" do
       targets = [:darwin_arm64, :linux_x86_64]

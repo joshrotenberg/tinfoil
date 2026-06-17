@@ -110,8 +110,8 @@ defmodule Tinfoil.ProjectEditor do
   Append a `defp releases do ... end` function with a Burrito
   `:targets` block for the given tinfoil targets. The function is
   inserted at the bottom of the module, right before the final `end`.
-  The release name matches the app atom so `Tinfoil.Burrito.pick_release/2`
-  picks it by name.
+  The release name matches the app atom so `Tinfoil.Burrito` picks it
+  by name.
   """
   @spec insert_releases_block(String.t(), atom(), [atom()]) ::
           {:ok, String.t(), status()} | {:error, :module_end_not_found}
