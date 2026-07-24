@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.21](https://github.com/joshrotenberg/tinfoil/compare/v0.2.20...v0.2.21) (2026-07-24)
+
+
+### Features
+
+* add trigger: :workflow_call for release-please repos ([#115](https://github.com/joshrotenberg/tinfoil/issues/115)) ([94e0529](https://github.com/joshrotenberg/tinfoil/commit/94e052920eee50a3060cef97830c34394996b884))
+* attach mode for tinfoil.publish and a release-published trigger ([#110](https://github.com/joshrotenberg/tinfoil/issues/110)) ([6afdc4a](https://github.com/joshrotenberg/tinfoil/commit/6afdc4a9f2d5d892e6edb7e36acae9f60cce68cd))
+
+
+### Bug Fixes
+
+* diagnose an unwrapped release instead of blaming mix release ([#113](https://github.com/joshrotenberg/tinfoil/issues/113)) ([6e245be](https://github.com/joshrotenberg/tinfoil/commit/6e245be390c3a1593da186d8a0d6255db94a888d))
+* honor prerelease_pattern + publishing polish batch ([#101](https://github.com/joshrotenberg/tinfoil/issues/101)) ([4c519a2](https://github.com/joshrotenberg/tinfoil/commit/4c519a236fcd01744e8eb24c16737ae5cd219871))
+* read the real Burrito module and the running Elixir for CI pins ([#112](https://github.com/joshrotenberg/tinfoil/issues/112)) ([e5c74c2](https://github.com/joshrotenberg/tinfoil/commit/e5c74c2e613d88ae31c8fb815a391fa4c6b02090))
+* scan the release dep set for NIFs, not the dev set ([#108](https://github.com/joshrotenberg/tinfoil/issues/108)) ([5e2d1bb](https://github.com/joshrotenberg/tinfoil/commit/5e2d1bb5db2965cc3e5d371c7af23a107f3c7f3b)), closes [#104](https://github.com/joshrotenberg/tinfoil/issues/104)
+
 ## [0.2.20](https://github.com/joshrotenberg/tinfoil/compare/v0.2.19...v0.2.20) (2026-04-14)
 
 
