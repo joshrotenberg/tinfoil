@@ -142,7 +142,7 @@ its maintenance pass (the `[l]` line when an older cached version
 is cleaned up). They are **not** tinfoil's output and tinfoil
 cannot silence them from the outside -- the wrapper runs before any
 Elixir code loads. Passing `debug: false` inside your `burrito:`
-config block has no effect on these lines as of Burrito 1.5.
+config block has no effect on these lines as of Burrito 1.6.
 
 The noise is safe to redirect (`your_cli 2>/dev/null`) if it
 bothers end users. Upstream tracking lives with Burrito; follow

@@ -45,7 +45,7 @@ defmodule Tinfoil.ConfigTest do
       assert config.installer.install_dir == "~/.local/bin"
       assert config.ci.elixir_version == "1.19"
       assert config.ci.otp_version == to_string(System.otp_release())
-      assert config.ci.zig_version == "0.15.2"
+      assert config.ci.zig_version == "0.16.0"
       assert Regex.regex?(config.prerelease_pattern)
       assert "v1.0.0-rc.1" =~ config.prerelease_pattern
       refute "v1.0.0" =~ config.prerelease_pattern
@@ -413,7 +413,7 @@ defmodule Tinfoil.ConfigTest do
       assert config.ci.elixir_version == "1.17"
       assert config.ci.otp_version == "27"
       # unchanged defaults
-      assert config.ci.zig_version == "0.15.2"
+      assert config.ci.zig_version == "0.16.0"
     end
   end
 

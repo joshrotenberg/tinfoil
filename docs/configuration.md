@@ -87,7 +87,7 @@ tinfoil: [
     # These are the fallbacks.
     elixir_version: "1.19",
     otp_version: "28",
-    zig_version: "0.15.2"
+    zig_version: "0.16.0"
   ]
 ]
 ```
