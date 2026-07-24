@@ -142,6 +142,7 @@ defmodule Mix.Tasks.Tinfoil.Plan do
   defp extras(plan) do
     [
       "format:    #{plan.archive_format} (#{plan.checksums})",
+      "trigger:   #{trigger_line(plan.trigger)}",
       "github:    #{github_line(plan.github)}",
       "homebrew:  #{homebrew_line(plan.homebrew)}",
       "scoop:     #{scoop_line(plan.scoop)}",
@@ -149,6 +150,9 @@ defmodule Mix.Tasks.Tinfoil.Plan do
     ]
     |> Enum.map_join("\n", &("  " <> &1))
   end
+
+  defp trigger_line(:tag_push), do: "tag push v* (tinfoil creates the release)"
+  defp trigger_line(:release_published), do: "release published (tinfoil attaches assets)"
 
   defp github_line(%{repo: nil}), do: "(unresolved — set :github, :repo in mix.exs)"
   defp github_line(%{repo: repo, draft: draft}), do: "#{repo} (draft: #{draft})"

@@ -10,7 +10,7 @@ generated workflow.
 | `mix tinfoil.generate`   | Regenerate the workflow and scripts from the current config. Run after editing `:tinfoil` in `mix.exs` or upgrading tinfoil. |
 | `mix tinfoil.plan`       | Print what would be built and released. Supports `--format human` (default), `--format json`, and `--format matrix` for GitHub Actions consumption. |
 | `mix tinfoil.build`      | Build a single target: run `mix release` with the right `BURRITO_TARGET`, package the binary into a `.tar.gz` (or `.zip` for Windows), and write a sha256 sidecar. Called by the generated workflow once per matrix entry. |
-| `mix tinfoil.publish`    | Create a GitHub Release from artifacts in `artifacts/` and upload every archive plus a combined `checksums-sha256.txt`. Tags containing `-rc`, `-beta`, or `-alpha` are marked as prereleases. Pass `--replace` to delete and recreate if a release for the tag already exists. |
+| `mix tinfoil.publish`    | Create a GitHub Release from artifacts in `artifacts/` and upload every archive plus a combined `checksums-sha256.txt`. Tags containing `-rc`, `-beta`, or `-alpha` are marked as prereleases. If a release for the tag already exists, pass `--attach` to upload to it without touching it, or `--replace` to delete and recreate it. |
 | `mix tinfoil.homebrew`   | Render the Homebrew formula from `artifacts/` and push it to the configured tap. Honors `homebrew.auth` for choosing between a PAT (`HOMEBREW_TAP_TOKEN`) and an SSH deploy key. |
 | `mix tinfoil.scoop`      | Render the Scoop manifest from `artifacts/` and push it to the configured bucket. Honors `scoop.auth` for choosing between a PAT (`SCOOP_BUCKET_TOKEN`) and an SSH deploy key. Requires `:windows_x86_64` in `:targets`. |
 

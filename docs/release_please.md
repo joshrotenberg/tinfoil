@@ -1,8 +1,9 @@
 # Automatic releases with release-please
 
-Tinfoil's generated `release.yml` reacts to a pushed git tag. To
-automate the "bump the version + update changelog + cut the tag"
-side of that loop,
+Tinfoil's generated `release.yml` reacts to a pushed git tag by
+default, or to a published GitHub Release if you set
+`trigger: :release_published`. To automate the "bump the version +
+update changelog + cut the tag" side of that loop,
 [release-please](https://github.com/googleapis/release-please) is
 the standard GitHub-native choice. This guide shows how to wire it
 up for a tinfoil'ed Burrito app and documents the one critical
@@ -128,6 +129,62 @@ triggers. The default tinfoil template only accepts
 `.github/workflows/release.yml` after `mix tinfoil.generate` to
 also accept `workflow_dispatch` with a `tag` input. In practice,
 Option 1 or 2 is less fragile.
+
+## Preserving the release-please changelog: attach mode
+
+Release-please does not only create the tag. It creates the GitHub
+Release too, and writes the curated changelog section as the body.
+
+With the default `trigger: :tag_push`, tinfoil's workflow fires on
+the tag and tries to create that same release. It already exists, so
+publish fails with `release_already_exists_no_replace`. Reaching for
+`--replace` does work, but it deletes the release and recreates it
+from commit-derived notes, discarding the changelog release-please
+just wrote.
+
+Set the trigger instead:
+
+```elixir
+tinfoil: [
+  targets: [:darwin_arm64, :linux_x86_64],
+  trigger: :release_published
+]
+```
+
+Regenerate with `mix tinfoil.generate`. Two things change:
+
+```yaml
+on:
+  release:
+    types: [published]
+```
+
+and the publish step runs `mix tinfoil.publish --attach`, which looks
+the release up by tag and uploads only the assets. The body,
+prerelease flag, and draft state stay exactly as release-please wrote
+them.
+
+Ordering is the reason this pairs with the trigger rather than being
+a standalone flag. On `push: tags` the workflow races release-please:
+the tag lands first, so `--attach` would intermittently find no
+release and fail. The `release: published` event fires only once the
+release object exists, so the lookup always succeeds.
+
+Two things to know:
+
+- The token gotcha above still applies. `release: published` is a
+  workflow-triggering event like any other, so a release created by a
+  job authenticated as `GITHUB_TOKEN` will not start a run. You still
+  need Option 1, 2, or 3.
+- `github: [draft: true]` has no effect under `:release_published`.
+  Attach mode never edits the release, so draft state belongs to
+  whatever created it. The generated workflow omits `--draft`
+  accordingly.
+
+If release-please is configured to create a *draft* release, the
+`published` event does not fire until you publish it by hand. That is
+a deliberate human gate, not a failure, but it does mean the binaries
+appear a moment after the release does.
 
 ## Full example
 

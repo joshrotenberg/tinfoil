@@ -170,6 +170,7 @@ defmodule Tinfoil.PublishTest do
                )
 
       assert result.release_id == 42
+      assert result.mode == :create
       assert result.html_url =~ "owner/my_cli/releases"
 
       assert Enum.sort(result.uploaded) == [
@@ -315,6 +316,7 @@ defmodule Tinfoil.PublishTest do
 
       # Second POST succeeded and we got the post-delete release id back
       assert result.release_id == 99
+      assert result.mode == :replace
 
       # Verify the full GET → DELETE → POST sequence happened
       assert_receive {:request, "POST", "/repos/owner/my_cli/releases", _, _}

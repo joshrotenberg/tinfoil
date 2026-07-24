@@ -125,6 +125,41 @@ defmodule Tinfoil.GeneratorTest do
       assert yaml =~ ~s(version: "0.14.0")
     end
 
+    test "workflow triggers on tag push by default and creates the release" do
+      yaml = build_config() |> Generator.render_workflow()
+
+      assert yaml =~ "on:\n  push:\n    tags: [\"v*\"]"
+      refute yaml =~ "release:\n    types: [published]"
+      assert yaml =~ "run: mix tinfoil.publish --input-dir artifacts"
+      refute yaml =~ "--attach"
+      assert yaml =~ "name: Publish GitHub Release"
+    end
+
+    test "workflow triggers on release published and attaches when configured" do
+      yaml = build_config(trigger: :release_published) |> Generator.render_workflow()
+
+      assert yaml =~ "on:\n  release:\n    types: [published]"
+      refute yaml =~ "push:\n    tags:"
+      assert yaml =~ "run: mix tinfoil.publish --input-dir artifacts --attach"
+      assert yaml =~ "name: Attach assets to GitHub Release"
+    end
+
+    test "attach mode drops --draft, which it would never apply" do
+      yaml =
+        build_config(trigger: :release_published, github: [draft: true])
+        |> Generator.render_workflow()
+
+      assert yaml =~ "--attach"
+      refute yaml =~ "--draft"
+    end
+
+    test "tag push mode still honors the draft flag" do
+      yaml = build_config(github: [draft: true]) |> Generator.render_workflow()
+
+      assert yaml =~ "--draft"
+      refute yaml =~ "--attach"
+    end
+
     test "workflow omits homebrew job when disabled" do
       yaml = build_config() |> Generator.render_workflow()
       refute yaml =~ "homebrew:"

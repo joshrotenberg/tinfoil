@@ -177,6 +177,7 @@ defmodule Tinfoil.Generator do
       app: config.app,
       build_entries: Tinfoil.Plan.build_entries(plan),
       ci: config.ci,
+      trigger: config.trigger,
       github: config.github,
       homebrew: config.homebrew,
       scoop: config.scoop,

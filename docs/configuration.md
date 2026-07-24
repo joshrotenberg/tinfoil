@@ -28,6 +28,21 @@ tinfoil: [
   archive_name: "{app}-{version}-{target}",
   archive_format: :tar_gz,
 
+  # What event the generated workflow fires on, and therefore who owns
+  # the GitHub Release.
+  #
+  #   :tag_push (default) -- `on: push: tags: ["v*"]`. Tinfoil creates
+  #     the release and generates its notes.
+  #   :release_published  -- `on: release: types: [published]`. Another
+  #     tool (release-please, changesets) creates the release and
+  #     tinfoil only attaches assets, leaving the body, prerelease
+  #     flag, and draft state untouched.
+  #
+  # Under :release_published the publish step runs with --attach, and
+  # the `github: [draft: ...]` setting no longer applies since attach
+  # mode never edits the release. See the release-please guide.
+  trigger: :tag_push,
+
   # GitHub Release configuration. :repo is inferred from
   # `git remote get-url origin` if omitted.
   github: [
