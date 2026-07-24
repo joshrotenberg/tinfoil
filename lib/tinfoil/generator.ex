@@ -178,6 +178,9 @@ defmodule Tinfoil.Generator do
       build_entries: Tinfoil.Plan.build_entries(plan),
       ci: config.ci,
       trigger: config.trigger,
+      attach: attach?(config.trigger),
+      tag_flag: tag_flag(config.trigger),
+      checkout_ref: checkout_ref(config.trigger),
       github: config.github,
       homebrew: config.homebrew,
       scoop: config.scoop,
@@ -186,6 +189,32 @@ defmodule Tinfoil.Generator do
 
     render_release_yml(assigns)
   end
+
+  # Whichever trigger is in play, the question the workflow needs
+  # answered is "does something else own the GitHub Release?". Both
+  # non-default triggers mean yes, so tinfoil uploads to it rather than
+  # creating one.
+  defp attach?(:tag_push), do: false
+  defp attach?(_), do: true
+
+  # For a `workflow_call` run the ref is the *caller's* -- usually the
+  # branch release-please pushed to -- so GITHUB_REF_NAME is "main", not
+  # the tag. Every task that needs the tag has to be told it explicitly.
+  #
+  # `inputs.tag` covers a direct call or dispatch; the
+  # `github.event.release.tag_name` fallback covers being called from a
+  # workflow that itself fired on a release event.
+  @tag_expr "${{ inputs.tag || github.event.release.tag_name }}"
+
+  defp tag_flag(:workflow_call), do: ~s( --tag "#{@tag_expr}")
+  defp tag_flag(_), do: ""
+
+  # Same reason: checkout would otherwise take the caller's ref and build
+  # whatever is on that branch now, which is not necessarily the commit
+  # the tag points at. An empty `ref:` is what actions/checkout already
+  # defaults to, so the other triggers omit the key entirely.
+  defp checkout_ref(:workflow_call), do: @tag_expr
+  defp checkout_ref(_), do: nil
 
   @doc false
   @spec render_formula(Config.t()) :: String.t()
