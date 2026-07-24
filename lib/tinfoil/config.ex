@@ -47,7 +47,7 @@ defmodule Tinfoil.Config do
       provider: :github_actions,
       elixir_version: "1.19",
       otp_version: "28",
-      zig_version: "0.15.2"
+      zig_version: "0.16.0"
     }
   ]
 
@@ -451,7 +451,7 @@ defmodule Tinfoil.Config do
   # Try to read Burrito's required Zig version via Burrito.get_versions/0.
   # Falls back to a hardcoded default when Burrito isn't loaded (e.g. in
   # tinfoil's own test suite).
-  @fallback_zig_version "0.15.2"
+  @fallback_zig_version "0.16.0"
 
   defp infer_zig_version do
     if Code.ensure_loaded?(Burrito) and function_exported?(Burrito, :get_versions, 0) do
