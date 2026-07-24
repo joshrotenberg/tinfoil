@@ -314,8 +314,8 @@ defmodule Tinfoil.ConfigTest do
       assert config.trigger == :tag_push
     end
 
-    test "accepts :tag_push and :release_published as triggers" do
-      for trigger <- [:tag_push, :release_published] do
+    test "accepts every supported trigger" do
+      for trigger <- [:tag_push, :release_published, :workflow_call] do
         {:ok, config} =
           Config.load(base_project(targets: [:darwin_arm64], trigger: trigger))
 

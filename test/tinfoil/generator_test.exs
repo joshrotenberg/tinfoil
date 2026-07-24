@@ -160,6 +160,64 @@ defmodule Tinfoil.GeneratorTest do
       refute yaml =~ "--attach"
     end
 
+    test "workflow_call trigger emits a reusable workflow with a tag input" do
+      yaml = build_config(trigger: :workflow_call) |> Generator.render_workflow()
+
+      assert yaml =~ "workflow_call:"
+      # Dispatch alongside it makes a failed release re-runnable without
+      # retagging.
+      assert yaml =~ "workflow_dispatch:"
+      refute yaml =~ "push:\n    tags:"
+      refute yaml =~ "release:\n    types:"
+    end
+
+    test "workflow_call attaches, since release-please already made the release" do
+      yaml = build_config(trigger: :workflow_call) |> Generator.render_workflow()
+
+      assert yaml =~ "--attach"
+      assert yaml =~ "name: Attach assets to GitHub Release"
+    end
+
+    test "workflow_call passes the tag explicitly to every task that needs it" do
+      # GITHUB_REF_NAME is the *caller's* ref on a workflow_call run, so
+      # none of these can infer the tag from the environment.
+      yaml =
+        build_config(
+          trigger: :workflow_call,
+          homebrew: [enabled: true, tap: "me/homebrew-tap"],
+          scoop: [enabled: true, bucket: "me/scoop-bucket"]
+        )
+        |> Generator.render_workflow()
+
+      for task <- ["tinfoil.publish", "tinfoil.homebrew", "tinfoil.scoop"] do
+        assert yaml =~ ~r/mix #{Regex.escape(task)} [^\n]*--tag /,
+               "#{task} should be given an explicit --tag"
+      end
+
+      assert yaml =~ "inputs.tag || github.event.release.tag_name"
+    end
+
+    test "workflow_call checks out the tag, not the caller's branch" do
+      yaml = build_config(trigger: :workflow_call) |> Generator.render_workflow()
+
+      checkouts = yaml |> String.split("\n") |> Enum.count(&(&1 =~ "actions/checkout@"))
+      refs = yaml |> String.split("\n") |> Enum.count(&(&1 =~ ~r/ref: "\$\{\{ inputs.tag/))
+
+      assert checkouts > 0
+      assert refs == checkouts, "every checkout should pin the tag ref"
+    end
+
+    test "other triggers leave checkout on its default ref" do
+      for trigger <- [:tag_push, :release_published] do
+        yaml = build_config(trigger: trigger) |> Generator.render_workflow()
+
+        refute yaml =~ "ref: \"${{ inputs.tag",
+               "#{trigger} should not pin a checkout ref"
+
+        refute yaml =~ "--tag ", "#{trigger} resolves the tag from GITHUB_REF_NAME"
+      end
+    end
+
     test "workflow omits homebrew job when disabled" do
       yaml = build_config() |> Generator.render_workflow()
       refute yaml =~ "homebrew:"

@@ -2,9 +2,21 @@
 # Regenerate with: mix tinfoil.generate
 name: Release
 
-on:<%= if @trigger == :release_published do %>
+on:<%= case @trigger do %><% :release_published -> %>
   release:
-    types: [published]<% else %>
+    types: [published]<% :workflow_call -> %>
+  workflow_call:
+    inputs:
+      tag:
+        description: "Tag to build and attach assets to. Defaults to the calling workflow's release event tag."
+        required: false
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and attach assets to, e.g. v1.2.3"
+        required: true
+        type: string<% _ -> %>
   push:
     tags: ["v*"]<% end %>
 
@@ -30,7 +42,9 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5<%= if @checkout_ref do %>
+        with:
+          ref: "<%= @checkout_ref %>"<% end %>
 
       - name: Set up Elixir/OTP
         uses: erlef/setup-beam@v1
@@ -81,7 +95,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5<%= if @checkout_ref do %>
+        with:
+          ref: "<%= @checkout_ref %>"<% end %>
 
       - name: Set up Elixir/OTP
         uses: erlef/setup-beam@v1
@@ -108,10 +124,10 @@ jobs:
       - name: Install dependencies
         run: mix deps.get
 
-      - name: <%= if @trigger == :release_published do %>Attach assets to GitHub Release<% else %>Publish GitHub Release<% end %>
+      - name: <%= if @attach do %>Attach assets to GitHub Release<% else %>Publish GitHub Release<% end %>
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: mix tinfoil.publish --input-dir artifacts<%= if @trigger == :release_published do %> --attach<% else %><%= if @github.draft do %> --draft<% end %><% end %>
+        run: mix tinfoil.publish --input-dir artifacts<%= if @attach do %> --attach<% else %><%= if @github.draft do %> --draft<% end %><% end %><%= @tag_flag %>
 <%= if @homebrew.enabled do %>
   homebrew:
     name: Update Homebrew tap
@@ -119,7 +135,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5<%= if @checkout_ref do %>
+        with:
+          ref: "<%= @checkout_ref %>"<% end %>
 
       - name: Set up Elixir/OTP
         uses: erlef/setup-beam@v1
@@ -144,7 +162,7 @@ jobs:
       - name: Update Homebrew formula<%= if @homebrew.auth == :token do %>
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.<%= @homebrew.token_secret %> }}<% end %>
-        run: mix tinfoil.homebrew --input-dir artifacts
+        run: mix tinfoil.homebrew --input-dir artifacts<%= @tag_flag %>
 <% end %>
 <%= if @scoop.enabled do %>
   scoop:
@@ -153,7 +171,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v5<%= if @checkout_ref do %>
+        with:
+          ref: "<%= @checkout_ref %>"<% end %>
 
       - name: Set up Elixir/OTP
         uses: erlef/setup-beam@v1
@@ -178,5 +198,5 @@ jobs:
       - name: Update Scoop manifest<%= if @scoop.auth == :token do %>
         env:
           SCOOP_BUCKET_TOKEN: ${{ secrets.<%= @scoop.token_secret %> }}<% end %>
-        run: mix tinfoil.scoop --input-dir artifacts
+        run: mix tinfoil.scoop --input-dir artifacts<%= @tag_flag %>
 <% end %>

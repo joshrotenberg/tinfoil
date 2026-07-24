@@ -37,10 +37,19 @@ tinfoil: [
   #     tool (release-please, changesets) creates the release and
   #     tinfoil only attaches assets, leaving the body, prerelease
   #     flag, and draft state untouched.
+  #   :workflow_call      -- `on: workflow_call:` + `workflow_dispatch:`.
+  #     Your release workflow invokes this one directly with `uses:`,
+  #     in the same run.
   #
-  # Under :release_published the publish step runs with --attach, and
-  # the `github: [draft: ...]` setting no longer applies since attach
-  # mode never edits the release. See the release-please guide.
+  # Both non-default triggers run the publish step with --attach, and
+  # `github: [draft: ...]` no longer applies since attach mode never
+  # edits the release.
+  #
+  # Reach for :workflow_call when a stock release-please setup never
+  # triggers anything: GitHub does not start workflow runs from events
+  # created with the default GITHUB_TOKEN, so neither the tag push nor
+  # the release publish fires, silently. Being called directly avoids
+  # event attribution entirely. See the release-please guide.
   trigger: :tag_push,
 
   # GitHub Release configuration. :repo is inferred from

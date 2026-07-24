@@ -1,9 +1,10 @@
 # Automatic releases with release-please
 
 Tinfoil's generated `release.yml` reacts to a pushed git tag by
-default, or to a published GitHub Release if you set
-`trigger: :release_published`. To automate the "bump the version +
-update changelog + cut the tag" side of that loop,
+default. It can instead react to a published GitHub Release, or be
+invoked directly as a reusable workflow, via `:trigger`. To automate
+the "bump the version + update changelog + cut the tag" side of that
+loop,
 [release-please](https://github.com/googleapis/release-please) is
 the standard GitHub-native choice. This guide shows how to wire it
 up for a tinfoil'ed Burrito app and documents the one critical
@@ -26,19 +27,22 @@ GitHub's Actions runtime has an anti-recursion rule: resources
 (tags, releases, pushes) created by a workflow that authenticated
 as `GITHUB_TOKEN` will not trigger new workflow runs.
 
-That is a problem here because tinfoil's `release.yml` fires on:
+This affects **both** event-based triggers, not just the default:
 
-```yaml
-on:
-  push:
-    tags: ["v*"]
-```
+| trigger | event release-please creates | fires? |
+|---|---|---|
+| `:tag_push` | the `v*` tag | no |
+| `:release_published` | the GitHub Release | no |
 
-If release-please creates the tag using `GITHUB_TOKEN`, the tag
-shows up in the repo but no `release.yml` run starts. No binaries
-ship. Silent failure.
+Release-please creates both with `GITHUB_TOKEN` unless you explicitly
+hand it a PAT, so with a stock setup the tag and release appear, no
+`release.yml` run ever starts, and the release simply has no binaries.
+Nothing errors. This is the single most common way to end up with a
+release and no attached artifacts.
 
-There are three workarounds. Pick one.
+Option 4 below sidesteps the rule entirely and is the recommended
+choice for a stock release-please repo. Options 1-3 make the events
+attributable to a user instead.
 
 ### Option 1: Personal Access Token (simplest)
 
@@ -122,13 +126,81 @@ job explicitly dispatch `release.yml` after creating the release:
 This is what tinfoil itself uses internally for its dogfood smoke
 test.
 
-Caveat: `release.yml` runs on the *workflow_dispatch* event, not
-the tag push, so the generated workflow needs to accept both
-triggers. The default tinfoil template only accepts
-`on: push: tags`; you would need to hand-edit
-`.github/workflows/release.yml` after `mix tinfoil.generate` to
-also accept `workflow_dispatch` with a `tag` input. In practice,
-Option 1 or 2 is less fragile.
+Caveat: `release.yml` runs on the *workflow_dispatch* event, not the
+tag push, so the generated workflow has to accept that trigger. The
+default `:tag_push` template only accepts `on: push: tags`, so this
+option needs `trigger: :workflow_call`, which emits a
+`workflow_dispatch` with a `tag` input alongside the callable entry
+point.
+
+At which point Option 4 is strictly simpler: if you are already
+setting that trigger, calling the workflow with `uses:` is one less
+moving part than dispatching it and waiting for a separate run.
+
+### Option 4: Call the workflow directly (recommended)
+
+Instead of hoping an event propagates, have the release-please
+workflow invoke tinfoil's workflow as a reusable one, in the same run.
+No event is involved, so the `GITHUB_TOKEN` rule never applies and no
+long-lived credential is needed.
+
+```elixir
+tinfoil: [
+  targets: [:darwin_arm64, :linux_x86_64],
+  trigger: :workflow_call
+]
+```
+
+`mix tinfoil.generate` then emits:
+
+```yaml
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: "Tag to build and attach assets to. Defaults to the calling workflow's release event tag."
+        required: false
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and attach assets to, e.g. v1.2.3"
+        required: true
+        type: string
+```
+
+Add a job to `release-please.yml` that calls it:
+
+```yaml
+  binaries:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+    secrets: inherit
+```
+
+The binaries job then sits alongside your other post-release jobs
+(Hex publish, container build, deploy) instead of living at the far
+end of an event that may never arrive.
+
+Two details the generated workflow handles for you, both consequences
+of a `workflow_call` run inheriting the *caller's* ref:
+
+- `GITHUB_REF_NAME` is the caller's branch, usually `main`, not the
+  tag. So `tinfoil.publish`, `tinfoil.homebrew`, and `tinfoil.scoop`
+  are all invoked with an explicit `--tag`.
+- `actions/checkout` would otherwise take that same branch and build
+  whatever is on it now, which is not necessarily the commit the tag
+  points at. Every checkout pins `ref:` to the tag.
+
+`workflow_dispatch` is emitted alongside so a failed release can be
+re-run from the Actions tab by typing the tag, without retagging.
+The tag-push trigger cannot offer that.
+
+Publishing still runs in `--attach` mode, since release-please created
+the release earlier in the same run. See the next section.
 
 ## Preserving the release-please changelog: attach mode
 
@@ -142,49 +214,40 @@ publish fails with `release_already_exists_no_replace`. Reaching for
 from commit-derived notes, discarding the changelog release-please
 just wrote.
 
-Set the trigger instead:
+Any trigger other than `:tag_push` switches the publish step to
+`mix tinfoil.publish --attach`, which looks the release up by tag and
+uploads only the assets. The body, prerelease flag, and draft state
+stay exactly as release-please wrote them.
+
+Both non-default triggers give you that:
 
 ```elixir
-tinfoil: [
-  targets: [:darwin_arm64, :linux_x86_64],
-  trigger: :release_published
-]
+trigger: :workflow_call       # Option 4, recommended
+trigger: :release_published   # needs Option 1, 2, or 3 for the token rule
 ```
 
-Regenerate with `mix tinfoil.generate`. Two things change:
-
-```yaml
-on:
-  release:
-    types: [published]
-```
-
-and the publish step runs `mix tinfoil.publish --attach`, which looks
-the release up by tag and uploads only the assets. The body,
-prerelease flag, and draft state stay exactly as release-please wrote
-them.
-
-Ordering is the reason this pairs with the trigger rather than being
-a standalone flag. On `push: tags` the workflow races release-please:
+Ordering is why attach pairs with the trigger rather than being a
+standalone flag. On `push: tags` the workflow races release-please:
 the tag lands first, so `--attach` would intermittently find no
-release and fail. The `release: published` event fires only once the
-release object exists, so the lookup always succeeds.
+release and fail. Both other triggers run only once the release object
+exists, so the lookup always succeeds.
 
 Two things to know:
 
-- The token gotcha above still applies. `release: published` is a
-  workflow-triggering event like any other, so a release created by a
-  job authenticated as `GITHUB_TOKEN` will not start a run. You still
-  need Option 1, 2, or 3.
-- `github: [draft: true]` has no effect under `:release_published`.
-  Attach mode never edits the release, so draft state belongs to
-  whatever created it. The generated workflow omits `--draft`
-  accordingly.
+- `:release_published` is still subject to the token rule above. It is
+  a workflow-triggering event like any other, so a release created by
+  a job authenticated as `GITHUB_TOKEN` will not start a run. Pair it
+  with Option 1, 2, or 3, or use `:workflow_call`, which has no such
+  constraint.
+- `github: [draft: true]` has no effect in attach mode. Attach never
+  edits the release, so draft state belongs to whatever created it.
+  The generated workflow omits `--draft` accordingly.
 
 If release-please is configured to create a *draft* release, the
 `published` event does not fire until you publish it by hand. That is
 a deliberate human gate, not a failure, but it does mean the binaries
-appear a moment after the release does.
+appear a moment after the release does. `:workflow_call` is not
+affected, since it does not wait on an event at all.
 
 ## Full example
 

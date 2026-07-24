@@ -62,7 +62,7 @@ defmodule Tinfoil.Config do
           burrito_names: %{Target.target() => atom()},
           archive_name: String.t(),
           archive_format: :tar_gz | :zip,
-          trigger: :tag_push | :release_published,
+          trigger: :tag_push | :release_published | :workflow_call,
           github: map(),
           homebrew: map(),
           scoop: map(),
@@ -243,7 +243,7 @@ defmodule Tinfoil.Config do
     end
   end
 
-  @valid_triggers [:tag_push, :release_published]
+  @valid_triggers [:tag_push, :release_published, :workflow_call]
 
   # What event the generated workflow fires on.
   #
@@ -252,6 +252,16 @@ defmodule Tinfoil.Config do
   #   * `:release_published` -- `on: release: types: [published]`.
   #     Something else (release-please, changesets) creates the release
   #     and tinfoil attaches assets to it, preserving its body.
+  #   * `:workflow_call` -- `on: workflow_call:` plus
+  #     `workflow_dispatch:`. The release-managing workflow invokes this
+  #     one directly with `uses:`, in the same run.
+  #
+  # `:workflow_call` exists because GitHub will not start a workflow run
+  # from an event created with the default `GITHUB_TOKEN`. A stock
+  # release-please setup creates both the tag and the release with that
+  # token, so neither `:tag_push` nor `:release_published` ever fires --
+  # silently, with no error and no binaries. Being invoked directly
+  # sidesteps event attribution entirely.
   #
   # The pairing matters: `:release_published` without `--attach` would
   # try to create a release that already exists, and `--attach` under
