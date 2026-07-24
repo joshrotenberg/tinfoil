@@ -142,6 +142,7 @@ defmodule Mix.Tasks.Tinfoil.Plan do
   defp extras(plan) do
     [
       "format:    #{plan.archive_format} (#{plan.checksums})",
+      "toolchain: #{toolchain_line(plan.ci)}",
       "trigger:   #{trigger_line(plan.trigger)}",
       "github:    #{github_line(plan.github)}",
       "homebrew:  #{homebrew_line(plan.homebrew)}",
@@ -149,6 +150,12 @@ defmodule Mix.Tasks.Tinfoil.Plan do
       "installer: #{installer_line(plan.installer)}"
     ]
     |> Enum.map_join("\n", &("  " <> &1))
+  end
+
+  # The three values most likely to be silently wrong, and previously
+  # only visible by reading the generated YAML.
+  defp toolchain_line(ci) do
+    "elixir #{ci.elixir_version} / OTP #{ci.otp_version} / zig #{ci.zig_version}"
   end
 
   defp trigger_line(:tag_push), do: "tag push v* (tinfoil creates the release)"

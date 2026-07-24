@@ -5,6 +5,11 @@ defmodule Tinfoil.ConfigTest do
 
   import Tinfoil.ProjectHelpers
 
+  defp running_elixir_minor do
+    [_, minor] = Regex.run(~r/^(\d+\.\d+)/, System.version())
+    minor
+  end
+
   describe "load/1" do
     test "returns an error when no :tinfoil key is present" do
       assert {:error, :missing_tinfoil_config} =
@@ -43,7 +48,7 @@ defmodule Tinfoil.ConfigTest do
       assert config.homebrew.formula_name == "my_cli"
       assert config.installer.enabled == false
       assert config.installer.install_dir == "~/.local/bin"
-      assert config.ci.elixir_version == "1.19"
+      assert config.ci.elixir_version == running_elixir_minor()
       assert config.ci.otp_version == to_string(System.otp_release())
       assert config.ci.zig_version == "0.16.0"
       assert Regex.regex?(config.prerelease_pattern)
@@ -154,30 +159,30 @@ defmodule Tinfoil.ConfigTest do
                )
     end
 
-    test "infers ci.elixir_version from the project's :elixir requirement" do
-      for {req, expected} <- [
-            {"~> 1.19", "1.19"},
-            {"~> 1.17.0", "1.17"},
-            {">= 1.15", "1.15"},
-            {"1.16.3", "1.16"}
-          ] do
+    test "infers ci.elixir_version from the running Elixir, not the :elixir requirement" do
+      # `~> 1.17` states the oldest Elixir a library supports; it is not a
+      # declaration of what to build the release with. Pairing that floor
+      # with System.otp_release/0 produced impossible combinations, so the
+      # requirement is ignored entirely now.
+      for req <- ["~> 1.19", "~> 1.17.0", ">= 1.15", "1.16.3"] do
         project =
           base_project(targets: [:darwin_arm64, :linux_x86_64])
           |> Keyword.put(:elixir, req)
 
         {:ok, config} = Config.load(project)
 
-        assert config.ci.elixir_version == expected,
-               "expected #{inspect(req)} -> #{inspect(expected)}, got #{inspect(config.ci.elixir_version)}"
+        assert config.ci.elixir_version == running_elixir_minor(),
+               "requirement #{inspect(req)} should not influence the inferred version"
       end
     end
 
-    test "ci.elixir_version falls back when project :elixir is absent or unparseable" do
-      {:ok, config} =
-        Config.load(base_project(targets: [:darwin_arm64, :linux_x86_64]))
+    test "inferred elixir and otp versions both come from the running system" do
+      # The pair is self-consistent by construction: same machine, same
+      # install. This is the invariant that #106 was about.
+      {:ok, config} = Config.load(base_project(targets: [:darwin_arm64, :linux_x86_64]))
 
-      # base_project has no :elixir, so we get the fallback
-      assert config.ci.elixir_version == "1.19"
+      assert config.ci.elixir_version == running_elixir_minor()
+      assert config.ci.otp_version == to_string(System.otp_release())
     end
 
     test "explicit ci.elixir_version override beats auto-detection" do

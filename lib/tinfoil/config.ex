@@ -122,7 +122,7 @@ defmodule Tinfoil.Config do
         extra_artifacts: extra_artifacts,
         single_runner_per_os: Keyword.get(tinfoil, :single_runner_per_os, false),
         attestations: Keyword.get(tinfoil, :attestations, true),
-        ci: merge_ci(Keyword.get(tinfoil, :ci, []), project)
+        ci: merge_ci(Keyword.get(tinfoil, :ci, []))
       }
 
       {:ok, config}
@@ -447,10 +447,10 @@ defmodule Tinfoil.Config do
     %{merged | manifest_name: manifest_name}
   end
 
-  defp merge_ci(user, project) do
+  defp merge_ci(user) do
     defaults = %{
       provider: :github_actions,
-      elixir_version: infer_elixir_version(project),
+      elixir_version: infer_elixir_version(),
       otp_version: infer_otp_version(),
       zig_version: infer_zig_version()
     }
@@ -458,34 +458,49 @@ defmodule Tinfoil.Config do
     Map.merge(defaults, Map.new(user))
   end
 
-  # Parse the user's mix.exs :elixir requirement (e.g. "~> 1.19", ">= 1.15.0")
-  # into a "MAJOR.MINOR" string suitable for erlef/setup-beam. Falls back to
-  # the current latest stable when the requirement can't be parsed.
+  # The running Elixir version as "MAJOR.MINOR", for erlef/setup-beam.
+  #
+  # This deliberately does NOT read the project's `:elixir` requirement.
+  # A requirement like `~> 1.17` is a compatibility statement about
+  # consumers -- the oldest Elixir a library supports -- not a
+  # declaration of what to build the release with. For a library the two
+  # routinely differ by several minor versions.
+  #
+  # Taking the floor from the requirement while taking OTP from
+  # `System.otp_release/0` produced pairs that existed nowhere: not on
+  # the developer's machine, not at the project's floor, not in CI.
+  # Elixir 1.17 + OTP 29 was the reported case, and setup-beam cannot
+  # resolve it. Reading both from the running system keeps them
+  # self-consistent by construction.
+  #
+  # Users who need a different pin set `ci: [elixir_version: ...]`
+  # explicitly, which still wins over everything here.
   @fallback_elixir_version "1.19"
 
-  defp infer_elixir_version(project) do
-    case Keyword.get(project, :elixir) do
-      req when is_binary(req) ->
-        case Regex.run(~r/(\d+\.\d+)/, req) do
-          [_, version] -> version
-          _ -> @fallback_elixir_version
-        end
-
-      _ ->
-        @fallback_elixir_version
+  defp infer_elixir_version do
+    case Regex.run(~r/^(\d+\.\d+)/, System.version()) do
+      [_, version] -> version
+      _ -> @fallback_elixir_version
     end
   end
 
   # Try to read Burrito's required Zig version via Burrito.get_versions/0.
   # Falls back to a hardcoded default when Burrito isn't loaded (e.g. in
   # tinfoil's own test suite).
+  #
+  # NOTE the fully-qualified `Elixir.Burrito`. This module aliases
+  # `Tinfoil.Burrito`, so a bare `Burrito` here resolves to *that*, which
+  # loads fine and does not export `get_versions/0` -- meaning the guard
+  # was always false and this always returned the fallback. Keep the
+  # `Elixir.` prefix; the alias cannot capture it.
   @fallback_zig_version "0.16.0"
 
   defp infer_zig_version do
-    if Code.ensure_loaded?(Burrito) and function_exported?(Burrito, :get_versions, 0) do
+    if Code.ensure_loaded?(Elixir.Burrito) and
+         function_exported?(Elixir.Burrito, :get_versions, 0) do
       # Burrito is not a dep of tinfoil; apply/3 avoids a compile-time warning.
       # credo:disable-for-next-line Credo.Check.Refactor.Apply
-      apply(Burrito, :get_versions, []).zig |> Version.to_string()
+      apply(Elixir.Burrito, :get_versions, []).zig |> Version.to_string()
     else
       @fallback_zig_version
     end
