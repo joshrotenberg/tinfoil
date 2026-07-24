@@ -33,6 +33,7 @@ defmodule Tinfoil.Config do
     :burrito_names,
     archive_name: "{app}-{version}-{target}",
     archive_format: :tar_gz,
+    trigger: :tag_push,
     github: %{repo: nil, draft: false},
     homebrew: %{enabled: false, tap: nil, formula_name: nil},
     scoop: %{enabled: false, bucket: nil, manifest_name: nil},
@@ -61,6 +62,7 @@ defmodule Tinfoil.Config do
           burrito_names: %{Target.target() => atom()},
           archive_name: String.t(),
           archive_format: :tar_gz | :zip,
+          trigger: :tag_push | :release_published,
           github: map(),
           homebrew: map(),
           scoop: map(),
@@ -93,6 +95,7 @@ defmodule Tinfoil.Config do
          :ok <- Target.validate(targets, extra_targets),
          {:ok, archive_name} <- fetch_archive_name(tinfoil),
          {:ok, archive_format} <- fetch_archive_format(tinfoil),
+         {:ok, trigger} <- fetch_trigger(tinfoil),
          {:ok, prerelease_pattern} <- fetch_prerelease_pattern(tinfoil),
          {:ok, homebrew} <- fetch_homebrew(tinfoil, project),
          {:ok, scoop} <- fetch_scoop(tinfoil, project),
@@ -108,6 +111,7 @@ defmodule Tinfoil.Config do
         burrito_names: burrito_names,
         archive_name: archive_name,
         archive_format: archive_format,
+        trigger: trigger,
         github: merge_github(Keyword.get(tinfoil, :github, [])),
         homebrew: homebrew,
         scoop: scoop,
@@ -236,6 +240,30 @@ defmodule Tinfoil.Config do
       {:ok, format}
     else
       {:error, {:invalid_archive_format, format}}
+    end
+  end
+
+  @valid_triggers [:tag_push, :release_published]
+
+  # What event the generated workflow fires on.
+  #
+  #   * `:tag_push` -- `on: push: tags: ["v*"]`. Tinfoil creates the
+  #     GitHub Release itself. The default.
+  #   * `:release_published` -- `on: release: types: [published]`.
+  #     Something else (release-please, changesets) creates the release
+  #     and tinfoil attaches assets to it, preserving its body.
+  #
+  # The pairing matters: `:release_published` without `--attach` would
+  # try to create a release that already exists, and `--attach` under
+  # `:tag_push` races whatever creates it. `Tinfoil.Generator` derives
+  # the publish flags from this key so the two can't drift apart.
+  defp fetch_trigger(tinfoil) do
+    trigger = Keyword.get(tinfoil, :trigger, :tag_push)
+
+    if trigger in @valid_triggers do
+      {:ok, trigger}
+    else
+      {:error, {:invalid_trigger, trigger}}
     end
   end
 
@@ -541,6 +569,11 @@ defmodule Tinfoil.Config do
     do:
       ":tinfoil :archive_format #{inspect(format)} is not supported. " <>
         "Valid formats: #{inspect(@valid_archive_formats)}"
+
+  defp format_error({:invalid_trigger, trigger}),
+    do:
+      ":tinfoil :trigger #{inspect(trigger)} is not supported. " <>
+        "Valid triggers: #{inspect(@valid_triggers)}"
 
   defp format_error(:homebrew_enabled_without_tap),
     do:

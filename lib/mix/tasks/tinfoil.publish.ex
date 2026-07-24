@@ -26,6 +26,12 @@ defmodule Mix.Tasks.Tinfoil.Publish do
     * `--tag`       — the release tag, e.g. `v1.2.3`. Defaults to
                       `GITHUB_REF_NAME`, which CI sets for tag pushes.
     * `--draft`     — create the release as a draft
+    * `--attach`    — upload to the release that already exists for
+                      this tag instead of creating one, leaving its
+                      body, prerelease flag, and draft state alone.
+                      Errors if no release exists. For projects where
+                      something else (release-please, changesets)
+                      already creates the release.
     * `--replace`   — if a release for this tag already exists,
                       delete it (and its assets) and create a fresh
                       one. The git tag itself is untouched. Intended
@@ -35,8 +41,13 @@ defmodule Mix.Tasks.Tinfoil.Publish do
                       draft/prerelease flags, asset list + sizes)
                       and exit without touching the GitHub API.
 
+  `--attach` and `--replace` are mutually exclusive: one preserves the
+  existing release, the other destroys it.
+
   Pre-release detection is automatic: tags containing `-rc`, `-beta`,
-  or `-alpha` are marked as prerelease in the created release.
+  or `-alpha` are marked as prerelease in the created release. In
+  `--attach` mode the existing release's prerelease flag is left as
+  whatever the creating tool set.
   """
 
   use Mix.Task
@@ -52,6 +63,7 @@ defmodule Mix.Tasks.Tinfoil.Publish do
           tag: :string,
           draft: :boolean,
           replace: :boolean,
+          attach: :boolean,
           dry_run: :boolean
         ]
       )
@@ -62,7 +74,7 @@ defmodule Mix.Tasks.Tinfoil.Publish do
         {:error, reason} -> Mix.raise("tinfoil config error: #{inspect(reason)}")
       end
 
-    publish_opts = Keyword.take(opts, [:input_dir, :tag, :draft, :replace, :dry_run])
+    publish_opts = Keyword.take(opts, [:input_dir, :tag, :draft, :replace, :attach, :dry_run])
 
     case Publish.publish(config, publish_opts) do
       {:ok, %{dry_run: true} = preview} ->
@@ -79,7 +91,7 @@ defmodule Mix.Tasks.Tinfoil.Publish do
   defp report(result) do
     Mix.shell().info([
       :green,
-      "* created release ",
+      "* #{describe_mode(result.mode)} ",
       :reset,
       result.html_url,
       "\n",
@@ -98,9 +110,9 @@ defmodule Mix.Tasks.Tinfoil.Publish do
     Mix.shell().info([:cyan, "tinfoil publish (dry-run)\n", :reset])
     Mix.shell().info("  repo:       #{preview.repo}")
     Mix.shell().info("  tag:        #{preview.tag}")
-    Mix.shell().info("  draft:      #{preview.draft}")
-    Mix.shell().info("  prerelease: #{preview.prerelease}")
-    Mix.shell().info("  replace:    #{preview.replace}")
+    Mix.shell().info("  mode:       #{preview.mode}")
+    Mix.shell().info("  draft:      #{release_field(preview, preview.draft)}")
+    Mix.shell().info("  prerelease: #{release_field(preview, preview.prerelease)}")
     Mix.shell().info("  assets:")
 
     Enum.each(preview.assets, fn asset ->
@@ -109,6 +121,15 @@ defmodule Mix.Tasks.Tinfoil.Publish do
 
     Mix.shell().info("\n  no GitHub API calls made")
   end
+
+  defp describe_mode(:create), do: "created release"
+  defp describe_mode(:attach), do: "attached to release"
+  defp describe_mode(:replace), do: "replaced release"
+
+  # Attach mode never writes these fields, so reporting a computed value
+  # would imply tinfoil is about to set something it will not touch.
+  defp release_field(%{mode: :attach}, _value), do: "(unchanged)"
+  defp release_field(_preview, value), do: to_string(value)
 
   defp format_size(bytes) when bytes >= 1_048_576, do: "#{div(bytes, 1_048_576)} MB"
   defp format_size(bytes) when bytes >= 1024, do: "#{div(bytes, 1024)} KB"
@@ -129,7 +150,22 @@ defmodule Mix.Tasks.Tinfoil.Publish do
   defp format_error(:release_already_exists_no_replace),
     do:
       "a release for this tag already exists on GitHub. " <>
-        "Re-run with --replace to delete and recreate it, or push a new tag."
+        "Re-run with --attach to upload the assets to it and leave the " <>
+        "release itself alone, with --replace to delete and recreate it, " <>
+        "or push a new tag."
+
+  defp format_error(:release_not_found_for_attach),
+    do:
+      "--attach was given but no release exists for this tag. " <>
+        "Attach mode expects another tool (release-please, changesets) to " <>
+        "have created it. If the workflow triggers on the tag push it can " <>
+        "outrun that tool; set `trigger: :release_published` in your " <>
+        ":tinfoil config and regenerate so it fires on the release event."
+
+  defp format_error(:attach_and_replace),
+    do:
+      "--attach and --replace are mutually exclusive: --attach preserves " <>
+        "the existing release, --replace deletes it. Pick one."
 
   defp format_error({:find_release_failed, status, body}),
     do:

@@ -304,6 +304,25 @@ defmodule Tinfoil.ConfigTest do
       end
     end
 
+    test "defaults :trigger to :tag_push" do
+      {:ok, config} = Config.load(base_project(targets: [:darwin_arm64]))
+      assert config.trigger == :tag_push
+    end
+
+    test "accepts :tag_push and :release_published as triggers" do
+      for trigger <- [:tag_push, :release_published] do
+        {:ok, config} =
+          Config.load(base_project(targets: [:darwin_arm64], trigger: trigger))
+
+        assert config.trigger == trigger
+      end
+    end
+
+    test "errors when :trigger is not supported" do
+      assert {:error, {:invalid_trigger, :on_push}} =
+               Config.load(base_project(targets: [:darwin_arm64], trigger: :on_push))
+    end
+
     test "errors when :homebrew is enabled without a tap" do
       assert {:error, :homebrew_enabled_without_tap} =
                Config.load(

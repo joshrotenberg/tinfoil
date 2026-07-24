@@ -37,11 +37,22 @@ defmodule Tinfoil.Publish do
           tag: String.t() | nil,
           draft: boolean() | nil,
           replace: boolean() | nil,
+          attach: boolean() | nil,
           dry_run: boolean() | nil,
           req: Req.Request.t() | nil
         ]
 
+  @typedoc """
+  How `publish/2` obtains the release it uploads to.
+
+    * `:create` -- create a new release for the tag (default)
+    * `:attach` -- upload to a release something else already created
+    * `:replace` -- delete the existing release and create a fresh one
+  """
+  @type mode :: :create | :attach | :replace
+
   @type result :: %{
+          mode: mode(),
           release_id: integer(),
           html_url: String.t(),
           uploaded: [String.t()]
@@ -51,9 +62,11 @@ defmodule Tinfoil.Publish do
           dry_run: true,
           repo: String.t(),
           tag: String.t(),
+          mode: mode(),
           draft: boolean(),
           prerelease: boolean(),
           replace: boolean(),
+          attach: boolean(),
           assets: [%{name: String.t(), path: Path.t(), size: non_neg_integer()}]
         }
 
@@ -64,7 +77,12 @@ defmodule Tinfoil.Publish do
     * `:missing_github_token` -- no `GITHUB_TOKEN` / `GH_TOKEN` env var
     * `:missing_tag` -- no tag given and `GITHUB_REF_NAME` is unset
     * `:release_already_exists_no_replace` -- release for the tag
-      already exists and `replace: true` wasn't passed
+      already exists and neither `attach: true` nor `replace: true`
+      was passed
+    * `:release_not_found_for_attach` -- `attach: true` was passed but
+      no release exists for the tag
+    * `:attach_and_replace` -- both `attach: true` and `replace: true`
+      were passed; they are mutually exclusive
     * `{:missing_input_dir, dir}` -- input directory doesn't exist
     * `{:create_release_failed, status, body}` -- GitHub API refused
       the release create (non-201, non-422)
@@ -88,6 +106,8 @@ defmodule Tinfoil.Publish do
           :missing_github_token
           | :missing_tag
           | :release_already_exists_no_replace
+          | :release_not_found_for_attach
+          | :attach_and_replace
           | {:missing_input_dir, Path.t()}
           | {:create_release_failed, non_neg_integer(), term()}
           | {:find_release_failed, non_neg_integer(), term()}
@@ -126,12 +146,27 @@ defmodule Tinfoil.Publish do
   touching the existing release or its assets — failing fast is
   safer than silently clobbering something a user already shipped.
 
-  Pass `replace: true` (or `--replace` on the mix task) to delete
-  and recreate the existing release. The git tag itself is never
-  touched; only the release object and its attached assets are
-  removed before the new release is created. Use this primarily
-  for development and force-retag iteration loops, not for published
-  versions.
+  Two escape hatches, which are mutually exclusive:
+
+  `attach: true` (or `--attach`) uploads to the release that already
+  exists and changes nothing about it — body, prerelease flag, and
+  draft state are left exactly as the other tool wrote them. This is
+  the mode for projects where something else owns release creation:
+  release-please tags the version, creates the release, and writes the
+  curated changelog as the body, and tinfoil only adds the binaries.
+  It errors with `:release_not_found_for_attach` when no release
+  exists, since attaching to nothing is always a mistake.
+
+  `replace: true` (or `--replace`) deletes and recreates the existing
+  release, which discards whatever body it had. The git tag itself is
+  never touched; only the release object and its attached assets are
+  removed before the new release is created. Use this for development
+  and force-retag iteration loops, not for published versions.
+
+  Attach mode only makes sense when the workflow runs *after* the
+  release exists. Set `trigger: :release_published` in the tinfoil
+  config so the generated workflow fires on the release event rather
+  than racing it on the tag push.
   """
   @spec publish(Config.t(), opts()) ::
           {:ok, result()} | {:ok, preview()} | {:error, error() | term()}
@@ -152,17 +187,19 @@ defmodule Tinfoil.Publish do
 
     input_dir = Keyword.get(opts, :input_dir, "artifacts")
 
-    with {:ok, repo} <- fetch_repo(config),
+    with {:ok, mode} <- fetch_mode(opts),
+         {:ok, repo} <- fetch_repo(config),
          {:ok, tag} <- fetch_tag(opts),
          :ok <- ensure_input_dir(input_dir),
          {:ok, req} <- build_req(opts) do
       _combined = Archive.combined_checksums(input_dir)
       assets = list_assets(input_dir)
 
-      with {:ok, release} <- create_or_replace_release(req, repo, tag, config, opts),
+      with {:ok, release, resolved_mode} <- resolve_release(mode, req, repo, tag, config, opts),
            {:ok, uploaded} <- upload_assets(req, release, assets) do
         {:ok,
          %{
+           mode: resolved_mode,
            release_id: release["id"],
            html_url: release["html_url"],
            uploaded: uploaded
@@ -178,7 +215,8 @@ defmodule Tinfoil.Publish do
   defp dry_run(config, opts) do
     input_dir = Keyword.get(opts, :input_dir, "artifacts")
 
-    with {:ok, repo} <- fetch_repo(config),
+    with {:ok, mode} <- fetch_mode(opts),
+         {:ok, repo} <- fetch_repo(config),
          {:ok, tag} <- fetch_tag(opts),
          :ok <- ensure_input_dir(input_dir) do
       _combined = Archive.combined_checksums(input_dir)
@@ -195,9 +233,11 @@ defmodule Tinfoil.Publish do
          dry_run: true,
          repo: repo,
          tag: tag,
+         mode: mode,
          draft: Keyword.get(opts, :draft, config.github[:draft] || false),
          prerelease: prerelease?(tag, config.prerelease_pattern),
-         replace: Keyword.get(opts, :replace, false),
+         replace: mode == :replace,
+         attach: mode == :attach,
          assets: asset_descriptors
        }}
     end
@@ -274,14 +314,40 @@ defmodule Tinfoil.Publish do
     end
   end
 
-  defp create_or_replace_release(req, repo, tag, config, opts) do
+  # `--attach` and `--replace` are opposites: one preserves the existing
+  # release, the other destroys it. Silently letting one win would be a
+  # quiet way to discard a changelog, so reject the combination up front,
+  # before any network call.
+  defp fetch_mode(opts) do
+    attach? = Keyword.get(opts, :attach, false)
+    replace? = Keyword.get(opts, :replace, false)
+
+    case {attach?, replace?} do
+      {true, true} -> {:error, :attach_and_replace}
+      {true, false} -> {:ok, :attach}
+      {false, true} -> {:ok, :replace}
+      {false, false} -> {:ok, :create}
+    end
+  end
+
+  # Attach mode never creates, so it resolves the release by tag alone.
+  # The other two modes optimistically create and sort out the 422.
+  defp resolve_release(:attach, req, repo, tag, _config, _opts) do
+    case find_release_by_tag(req, repo, tag) do
+      {:ok, release} -> {:ok, release, :attach}
+      {:error, {:find_release_failed, 404, _body}} -> {:error, :release_not_found_for_attach}
+      other -> other
+    end
+  end
+
+  defp resolve_release(mode, req, repo, tag, config, opts) do
     case create_release(req, repo, tag, config, opts) do
       {:ok, release} ->
-        {:ok, release}
+        {:ok, release, :create}
 
       {:error, {:create_release_failed, 422, body}} = err ->
         if release_already_exists?(body) do
-          handle_existing_release(req, repo, tag, config, opts)
+          handle_existing_release(mode, req, repo, tag, config, opts)
         else
           err
         end
@@ -291,15 +357,16 @@ defmodule Tinfoil.Publish do
     end
   end
 
-  defp handle_existing_release(req, repo, tag, config, opts) do
-    if Keyword.get(opts, :replace, false) do
-      with {:ok, existing} <- find_release_by_tag(req, repo, tag),
-           :ok <- delete_release(req, repo, existing["id"]) do
-        create_release(req, repo, tag, config, opts)
-      end
-    else
-      {:error, :release_already_exists_no_replace}
+  defp handle_existing_release(:replace, req, repo, tag, config, opts) do
+    with {:ok, existing} <- find_release_by_tag(req, repo, tag),
+         :ok <- delete_release(req, repo, existing["id"]),
+         {:ok, release} <- create_release(req, repo, tag, config, opts) do
+      {:ok, release, :replace}
     end
+  end
+
+  defp handle_existing_release(_mode, _req, _repo, _tag, _config, _opts) do
+    {:error, :release_already_exists_no_replace}
   end
 
   defp release_already_exists?(%{"errors" => errors}) when is_list(errors) do
