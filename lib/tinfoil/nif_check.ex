@@ -47,6 +47,49 @@ defmodule Tinfoil.NifCheck do
   end
 
   @doc """
+  Resolve the dep set to scan: the deps that will actually be present
+  in the release build.
+
+  `mix tinfoil.plan` normally runs under `MIX_ENV=dev`, but the
+  generated workflow builds under `MIX_ENV=prod`. Scanning the dev set
+  reports NIFs in deps that can never reach the artifact -- `credo`
+  pulls in `file_system`, which carries a `c_src/` directory but is
+  `only: [:dev, :test]` and so is absent from the release.
+
+  Two filters are applied:
+
+    * environment -- deps are resolved as `env` sees them, so `only:`
+      restrictions that exclude a dep from the build drop it here too
+    * `runtime: false` -- top-level deps marked compile-time-only are
+      excluded from the release's `:applications`, so a NIF in one
+      cannot affect the built binary
+
+  Returns `{name, path}` tuples suitable for `check/1`. The list is
+  empty when `mix deps.get` hasn't been run, in which case callers
+  should stay silent rather than emit spurious warnings.
+  """
+  @spec release_deps(atom()) :: [{atom(), Path.t()}]
+  def release_deps(env \\ :prod) do
+    excluded = compile_time_only(Keyword.get(Mix.Project.config(), :deps, []))
+
+    env
+    |> deps_paths_in_env()
+    |> Enum.reject(fn {name, _path} -> MapSet.member?(excluded, name) end)
+    |> Enum.sort()
+  end
+
+  @doc false
+  # Top-level deps declared `runtime: false` are compiled but left out
+  # of the project's `:applications`, so `mix release` never packages
+  # them. Tinfoil itself is declared this way in every user project.
+  @spec compile_time_only([tuple()]) :: MapSet.t(atom())
+  def compile_time_only(deps) do
+    deps
+    |> Enum.filter(fn dep -> Keyword.get(dep_opts(dep), :runtime, true) == false end)
+    |> MapSet.new(&elem(&1, 0))
+  end
+
+  @doc """
   Human-readable sentence for a reason atom.
   """
   @spec describe(reason()) :: String.t()
@@ -63,6 +106,36 @@ defmodule Tinfoil.NifCheck do
     do: "has c_src/ directory; C extensions may not cross-compile cleanly"
 
   ## ───────────────────── internals ─────────────────────
+
+  # `Mix.Project.deps_paths/0` is environment-sensitive: it returns the
+  # deps the *current* `Mix.env()` resolves to. To see the build's view
+  # from a `plan` running in dev we flip the env, drop Mix's dep cache
+  # so the next load re-resolves, and restore both afterwards.
+  #
+  # `Mix.Dep.clear_cached/0` is undocumented but has been present and
+  # stable since well before 1.15. Its 1.15-era sibling
+  # `Mix.Dep.load_on_environment/1` -- the obvious API for this -- was
+  # removed in 1.16, so it isn't usable across the supported range.
+  defp deps_paths_in_env(env) do
+    if Mix.env() == env do
+      Map.to_list(Mix.Project.deps_paths())
+    else
+      previous = Mix.env()
+
+      try do
+        Mix.env(env)
+        Mix.Dep.clear_cached()
+        Map.to_list(Mix.Project.deps_paths())
+      after
+        Mix.env(previous)
+        Mix.Dep.clear_cached()
+      end
+    end
+  end
+
+  defp dep_opts({_name, opts}) when is_list(opts), do: opts
+  defp dep_opts({_name, _req, opts}) when is_list(opts), do: opts
+  defp dep_opts(_), do: []
 
   # Order reasons deterministically regardless of detection order.
   @reason_order [:rustler, :rustler_precompiled, :elixir_make, :c_sources]
