@@ -96,10 +96,22 @@ tinfoil: [
 
   ci: [
     provider: :github_actions,
-    # All three are auto-detected if not set: elixir_version from
-    # the project's :elixir requirement, otp_version from
-    # System.otp_release(), zig_version from Burrito.get_versions().
-    # These are the fallbacks.
+    # All three are auto-detected if not set, and the values below are
+    # only the fallbacks used when detection fails:
+    #
+    #   elixir_version  System.version(), as MAJOR.MINOR
+    #   otp_version     System.otp_release()
+    #   zig_version     Burrito.get_versions().zig
+    #
+    # Elixir and OTP both come from the machine running
+    # `mix tinfoil.generate`, so the pair is always one that actually
+    # exists. The project's `:elixir` requirement is deliberately not
+    # used: `~> 1.17` says which Elixir versions may *consume* the
+    # library, which for a library is often several minor versions
+    # below what you build releases with, and pairing that floor with
+    # the running OTP produced combinations setup-beam cannot resolve.
+    #
+    # Run `mix tinfoil.plan` to see the resolved values before you tag.
     elixir_version: "1.19",
     otp_version: "28",
     zig_version: "0.16.0"
