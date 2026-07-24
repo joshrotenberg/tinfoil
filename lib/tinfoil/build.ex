@@ -65,8 +65,7 @@ defmodule Tinfoil.Build do
     binary = Path.join("burrito_out", "#{config.app}_#{burrito_name}#{binary_ext}")
 
     if not File.exists?(binary) do
-      raise "no Burrito output at #{binary}. " <>
-              "Did `mix release` succeed for BURRITO_TARGET=#{burrito_name}?"
+      raise missing_binary_message(binary, config.app, burrito_name)
     end
 
     info(["* packaging ", binary])
@@ -138,6 +137,56 @@ defmodule Tinfoil.Build do
 
   defp package(".tar.gz", binary, app, _binary_ext, basename, output_dir, extras) do
     Archive.tar_gz(binary, app, basename, output_dir, extras)
+  end
+
+  # Two very different failures land here. Either `mix release` genuinely
+  # failed, or it succeeded and produced a plain OTP release because
+  # Burrito's wrap step never ran. The second case used to report the
+  # first, which sends people to look at a release that worked fine.
+  #
+  # An assembled release directory alongside a missing burrito_out binary
+  # is a reliable signal for the second case, and it is cheap to check.
+  @doc false
+  @spec missing_binary_message(Path.t(), atom(), atom()) :: String.t()
+  def missing_binary_message(binary, app, burrito_name) do
+    rel = Path.join([Mix.Project.build_path(), "rel", to_string(app)])
+
+    if File.dir?(rel) do
+      assembled_without_wrap_message(binary, rel)
+    else
+      "no Burrito output at #{binary}. " <>
+        "Did `mix release` succeed for BURRITO_TARGET=#{burrito_name}?"
+    end
+  end
+
+  defp assembled_without_wrap_message(binary, rel) do
+    """
+    no Burrito output at #{binary}, but an assembled release exists at #{rel}.
+
+    `mix release` succeeded and produced a plain OTP release, so Burrito's
+    wrap step did not run for this target.
+
+    The usual cause is a `steps:` gate on BURRITO_TARGET in mix.exs:
+
+        steps: if(System.get_env("BURRITO_TARGET"),
+                 do: [:assemble, &Burrito.wrap/1],
+                 else: [:assemble])
+
+    mix.exs is evaluated at Mix startup, before any task runs, so
+    BURRITO_TARGET is always nil while releases/0 is being built --
+    tinfoil sets it inside the task, which is already too late. The gate
+    silently takes the else branch.
+
+    Gate on the invoked task instead, since argv IS populated by then:
+
+        defp burrito_build? do
+          System.get_env("BURRITO_TARGET") != nil or
+            match?(["tinfoil.build" | _], System.argv())
+        end
+
+    If your release is unconditional, check that `&Burrito.wrap/1` is in
+    its `steps:` and that the release name matches the app name.
+    """
   end
 
   defp run_release(burrito_name) do

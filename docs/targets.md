@@ -59,6 +59,51 @@ target (`macos_m1`), runs `mix release` with
 no matching Burrito target, `Tinfoil.Config.load/1` returns an
 error at plan time naming the expected `[os:, cpu:]` pair.
 
+## BURRITO_TARGET is not readable from mix.exs
+
+Tinfoil sets `BURRITO_TARGET` and then runs the release task in the
+same process. `mix.exs` is evaluated at Mix startup, before any task
+runs, so `System.get_env("BURRITO_TARGET")` is always `nil` while
+`releases/0` is being built.
+
+This matters if you share one release entry between Burrito binaries
+and something else, which is the normal shape for a project that also
+ships a container image. The Dockerfile runs plain `mix release` and
+wants an assembled release; `mix tinfoil.build` wants a wrapped
+binary. The tempting gate does not work:
+
+```elixir
+# Does NOT work: the env var is always nil here.
+steps: if(System.get_env("BURRITO_TARGET"),
+         do: [:assemble, &Burrito.wrap/1],
+         else: [:assemble])
+```
+
+It silently takes the `else` branch, `mix release` assembles normally,
+and the build fails at the next step complaining about a missing
+`burrito_out/` binary.
+
+Gate on the invoked task instead. `System.argv/0` *is* populated when
+`mix.exs` is evaluated:
+
+```elixir
+defp burrito_build? do
+  System.get_env("BURRITO_TARGET") != nil or
+    match?(["tinfoil.build" | _], System.argv())
+end
+
+# in releases/0
+steps: if(burrito_build?(), do: [:assemble, &Burrito.wrap/1], else: [:assemble])
+```
+
+The env-var check is kept first so the gate still works if you invoke
+`mix release` yourself with `BURRITO_TARGET` exported.
+
+A consequence of the shared process: every target in a
+`single_runner_per_os` job shares one BEAM and one cached
+`Mix.Project` config, so per-target project configuration cannot vary
+within a job.
+
 ## Previewing the plan
 
 `mix tinfoil.plan` prints the resolved target map read-only:
