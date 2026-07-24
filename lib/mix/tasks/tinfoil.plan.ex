@@ -69,12 +69,10 @@ defmodule Mix.Tasks.Tinfoil.Plan do
   end
 
   defp warn_nifs do
-    # Mix.Project.deps_paths/0 returns a map of name => path for all resolved
-    # deps; empty if `mix deps.get` hasn't been run, in which case we stay
-    # silent rather than emitting spurious warnings.
-    deps = Map.to_list(Mix.Project.deps_paths())
-
-    case NifCheck.check(deps) do
+    # Scan the deps the release will actually contain, not the ones this
+    # task happens to see. `plan` runs in dev; the build runs in prod, so
+    # dev/test-only deps here would be false positives.
+    case NifCheck.check(NifCheck.release_deps(:prod)) do
       [] ->
         :ok
 
