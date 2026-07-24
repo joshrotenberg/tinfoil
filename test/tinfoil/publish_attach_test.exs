@@ -50,20 +50,7 @@ defmodule Tinfoil.PublishAttachTest do
       cond do
         conn.method == "GET" and
             conn.request_path == "/repos/owner/my_cli/releases/tags/#{@tag_name}" ->
-          if found? do
-            respond_json(conn, 200, %{
-              "id" => 7,
-              "tag_name" => @tag_name,
-              "html_url" => @release_url,
-              "body" => "## 1.2.3\n\n* curated changelog from release-please",
-              "prerelease" => false,
-              "draft" => false,
-              "upload_url" =>
-                "https://test.invalid/repos/owner/my_cli/releases/7/assets{?name,label}"
-            })
-          else
-            respond_json(conn, 404, %{"message" => "Not Found"})
-          end
+          lookup_response(conn, found?)
 
         conn.method == "POST" and
             String.starts_with?(conn.request_path, "/repos/owner/my_cli/releases/7/assets") ->
@@ -73,6 +60,24 @@ defmodule Tinfoil.PublishAttachTest do
           respond_json(conn, 500, %{"message" => "unexpected request"})
       end
     end
+  end
+
+  # The release release-please would have created: a curated body that
+  # attach mode must leave intact.
+  defp lookup_response(conn, true) do
+    respond_json(conn, 200, %{
+      "id" => 7,
+      "tag_name" => @tag_name,
+      "html_url" => @release_url,
+      "body" => "## 1.2.3\n\n* curated changelog from release-please",
+      "prerelease" => false,
+      "draft" => false,
+      "upload_url" => "https://test.invalid/repos/owner/my_cli/releases/7/assets{?name,label}"
+    })
+  end
+
+  defp lookup_response(conn, false) do
+    respond_json(conn, 404, %{"message" => "Not Found"})
   end
 
   defp respond_json(conn, status, body) do
