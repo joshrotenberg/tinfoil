@@ -73,7 +73,7 @@ jobs:
       - name: Build and package release
         run: |
           for target in $(echo "${{ matrix.targets }}" | tr ',' ' '); do
-            mix tinfoil.build --target "$target"
+            mix tinfoil.build --target "$target"<%= @tag_flag %>
           done
 
       - name: Upload artifact

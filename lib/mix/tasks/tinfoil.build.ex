@@ -20,6 +20,10 @@ defmodule Mix.Tasks.Tinfoil.Build do
     * `--skip-release` — skip `mix release` and package an existing
                          `burrito_out/<app>_<burrito_name>` binary
     * `--output-dir`   — directory for the archive (default `_tinfoil`)
+    * `--tag`          — the release tag to check mix.exs against, e.g.
+                         `v1.2.3`. Defaults to `GITHUB_REF_NAME`. Needed
+                         under `trigger: :workflow_call`, where that env
+                         var holds the calling workflow's branch.
     * `--skip-version-check` — skip the git tag vs mix.exs version check
   """
 
@@ -35,6 +39,7 @@ defmodule Mix.Tasks.Tinfoil.Build do
           target: :string,
           skip_release: :boolean,
           output_dir: :string,
+          tag: :string,
           skip_version_check: :boolean
         ]
       )
@@ -52,10 +57,7 @@ defmodule Mix.Tasks.Tinfoil.Build do
     end
 
     unless opts[:skip_version_check] do
-      case Build.validate_tag_version(config.version) do
-        :ok -> :ok
-        {:error, msg} -> Mix.raise(msg <> " Pass --skip-version-check to bypass.")
-      end
+      check_version(config.version, Keyword.take(opts, [:tag]))
     end
 
     warn_if_not_prod()
@@ -68,6 +70,19 @@ defmodule Mix.Tasks.Tinfoil.Build do
       )
 
     report(result)
+  end
+
+  defp check_version(version, opts) do
+    case Build.validate_tag_version(version, opts) do
+      :ok ->
+        :ok
+
+      {:skip, msg} ->
+        Mix.shell().info([:yellow, "warning: ", msg, :reset])
+
+      {:error, msg} ->
+        Mix.raise(msg <> " Pass --skip-version-check to bypass.")
+    end
   end
 
   defp parse_target(nil),

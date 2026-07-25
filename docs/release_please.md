@@ -189,8 +189,10 @@ Two details the generated workflow handles for you, both consequences
 of a `workflow_call` run inheriting the *caller's* ref:
 
 - `GITHUB_REF_NAME` is the caller's branch, usually `main`, not the
-  tag. So `tinfoil.publish`, `tinfoil.homebrew`, and `tinfoil.scoop`
-  are all invoked with an explicit `--tag`.
+  tag. So `tinfoil.build`, `tinfoil.publish`, `tinfoil.homebrew`, and
+  `tinfoil.scoop` are all invoked with an explicit `--tag`. For the
+  build that is the difference between checking mix.exs against
+  `v1.2.3` and against `main`.
 - `actions/checkout` would otherwise take that same branch and build
   whatever is on it now, which is not necessarily the commit the tag
   points at. Every checkout pins `ref:` to the tag.
