@@ -96,28 +96,81 @@ defmodule Tinfoil.Build do
   end
 
   @doc """
-  Check that the `GITHUB_REF_NAME` tag (if set) matches the given version.
+  Check that the release tag matches the given version.
 
-  Returns `:ok` when the env var is unset or the versions match.
-  Returns `{:error, message}` on mismatch.
+  The tag comes from `opts[:tag]` if given, otherwise from the
+  `GITHUB_REF_NAME` environment variable. Explicit beats env, matching
+  how `Tinfoil.Publish`, `Tinfoil.Homebrew`, and `Tinfoil.Scoop` resolve
+  the tag.
+
+  Returns:
+
+    * `:ok` — no tag available, or the tag matches
+    * `{:skip, message}` — the tag is not version-shaped, so there is
+      nothing meaningful to compare. Callers should warn and continue.
+    * `{:error, message}` — a real mismatch
   """
-  @spec validate_tag_version(String.t()) :: :ok | {:error, String.t()}
-  def validate_tag_version(mix_version) do
-    case System.get_env("GITHUB_REF_NAME") do
-      nil ->
-        :ok
-
-      tag ->
-        tag_version = String.trim_leading(tag, "v")
-
-        if tag_version == mix_version do
-          :ok
-        else
-          {:error,
-           "tag #{tag} does not match mix.exs version #{mix_version}. " <>
-             "Bump the version in mix.exs or re-tag."}
-        end
+  @spec validate_tag_version(String.t(), keyword()) ::
+          :ok | {:skip, String.t()} | {:error, String.t()}
+  def validate_tag_version(mix_version, opts \\ []) do
+    case resolve_tag(opts) do
+      :none -> :ok
+      {:ok, source, tag} -> compare_tag(source, tag, mix_version)
     end
+  end
+
+  # Blank is treated as absent so a workflow that interpolates an unset
+  # GitHub expression into `--tag ""` degrades to the env var rather than
+  # comparing against nothing.
+  defp resolve_tag(opts) do
+    explicit = blank_to_nil(Keyword.get(opts, :tag))
+    env = blank_to_nil(System.get_env("GITHUB_REF_NAME"))
+
+    cond do
+      explicit -> {:ok, :flag, explicit}
+      env -> {:ok, :env, env}
+      true -> :none
+    end
+  end
+
+  defp blank_to_nil(nil), do: nil
+  defp blank_to_nil(value), do: if(String.trim(value) == "", do: nil, else: value)
+
+  defp compare_tag(source, tag, mix_version) do
+    tag_version = String.trim_leading(tag, "v")
+
+    cond do
+      tag_version == mix_version -> :ok
+      not version_shaped?(tag_version) -> {:skip, not_a_tag_message(source, tag)}
+      true -> {:error, mismatch_message(tag, mix_version)}
+    end
+  end
+
+  # A ref that does not even start with digits is a branch name, not a
+  # botched tag. Reporting it as a version skew sends people to bump
+  # mix.exs or re-tag, and neither is the problem.
+  defp version_shaped?(candidate), do: Regex.match?(~r/^\d+\./, candidate)
+
+  defp mismatch_message(tag, mix_version) do
+    "tag #{tag} does not match mix.exs version #{mix_version}. " <>
+      "Bump the version in mix.exs or re-tag."
+  end
+
+  defp not_a_tag_message(:flag, tag) do
+    "--tag #{inspect(tag)} is not a version tag, so the mix.exs version " <>
+      "check was skipped."
+  end
+
+  defp not_a_tag_message(:env, ref) do
+    """
+    GITHUB_REF_NAME is #{inspect(ref)}, which is not a version tag, so the
+    mix.exs version check was skipped.
+
+    A `workflow_call` run inherits the calling workflow's ref, so this is
+    the caller's branch rather than the tag. The generated workflow passes
+    `--tag` for that trigger; if yours does not, regenerate it with
+    `mix tinfoil.generate`.
+    """
   end
 
   ## ───────────────────── internals ─────────────────────

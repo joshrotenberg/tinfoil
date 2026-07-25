@@ -189,12 +189,32 @@ defmodule Tinfoil.GeneratorTest do
         )
         |> Generator.render_workflow()
 
-      for task <- ["tinfoil.publish", "tinfoil.homebrew", "tinfoil.scoop"] do
+      for task <- ["tinfoil.build", "tinfoil.publish", "tinfoil.homebrew", "tinfoil.scoop"] do
         assert yaml =~ ~r/mix #{Regex.escape(task)} [^\n]*--tag /,
                "#{task} should be given an explicit --tag"
       end
 
       assert yaml =~ "inputs.tag || github.event.release.tag_name"
+    end
+
+    # #116: build was the one task left reading GITHUB_REF_NAME, and it runs
+    # first, so every matrix job failed its version check against the
+    # caller's branch before Burrito was ever invoked.
+    test "workflow_call gives the build step the tag its version check needs" do
+      yaml = build_config(trigger: :workflow_call) |> Generator.render_workflow()
+
+      assert yaml =~
+               ~s(mix tinfoil.build --target "$target" ) <>
+                 ~s(--tag "${{ inputs.tag || github.event.release.tag_name }}")
+    end
+
+    test "other triggers leave the build step reading the ref" do
+      for trigger <- [:tag_push, :release_published] do
+        yaml = build_config(trigger: trigger) |> Generator.render_workflow()
+
+        assert yaml =~ ~s(mix tinfoil.build --target "$target"\n),
+               "#{trigger} should not pass --tag to the build"
+      end
     end
 
     test "workflow_call checks out the tag, not the caller's branch" do

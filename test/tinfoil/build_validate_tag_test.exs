@@ -41,4 +41,62 @@ defmodule Tinfoil.Build.ValidateTagTest do
       assert msg =~ "tag v1.2.3-rc.1 does not match mix.exs version 1.2.3"
     end
   end
+
+  describe "validate_tag_version/2 with an explicit tag" do
+    test "the flag wins over GITHUB_REF_NAME" do
+      System.put_env("GITHUB_REF_NAME", "main")
+      assert :ok = Build.validate_tag_version("1.2.3", tag: "v1.2.3")
+    end
+
+    test "a mismatched flag is still an error even when the env agrees" do
+      System.put_env("GITHUB_REF_NAME", "v1.2.3")
+      assert {:error, msg} = Build.validate_tag_version("1.2.3", tag: "v9.9.9")
+      assert msg =~ "tag v9.9.9 does not match mix.exs version 1.2.3"
+    end
+
+    test "a blank flag falls back to the env var" do
+      System.put_env("GITHUB_REF_NAME", "v1.2.3")
+      assert :ok = Build.validate_tag_version("1.2.3", tag: "")
+    end
+
+    test "a blank flag and a blank env var check nothing" do
+      System.put_env("GITHUB_REF_NAME", "")
+      assert :ok = Build.validate_tag_version("1.2.3", tag: "")
+    end
+  end
+
+  # The bug in #116: a workflow_call run inherits the caller's ref, so the
+  # version check compared mix.exs against a branch name and told the user
+  # to bump mix.exs or re-tag, neither of which was the problem.
+  describe "validate_tag_version/2 with a branch ref" do
+    test "skips rather than failing when the ref is a branch name" do
+      System.put_env("GITHUB_REF_NAME", "main")
+      assert {:skip, msg} = Build.validate_tag_version("1.2.3")
+      assert msg =~ ~s(GITHUB_REF_NAME is "main")
+      assert msg =~ "workflow_call"
+      refute msg =~ "does not match"
+    end
+
+    test "skips for a hyphenated branch name" do
+      System.put_env("GITHUB_REF_NAME", "my-feature-branch")
+      assert {:skip, _msg} = Build.validate_tag_version("1.2.3")
+    end
+
+    test "skips for a slash-prefixed branch that mentions a version" do
+      System.put_env("GITHUB_REF_NAME", "release/1.2.3")
+      assert {:skip, _msg} = Build.validate_tag_version("9.9.9")
+    end
+
+    test "a non-version explicit tag skips without blaming the env" do
+      System.delete_env("GITHUB_REF_NAME")
+      assert {:skip, msg} = Build.validate_tag_version("1.2.3", tag: "main")
+      assert msg =~ "--tag \"main\""
+      refute msg =~ "GITHUB_REF_NAME"
+    end
+
+    test "a version-shaped ref that disagrees is still a hard error" do
+      System.put_env("GITHUB_REF_NAME", "v1.2.4")
+      assert {:error, _msg} = Build.validate_tag_version("1.2.3")
+    end
+  end
 end
