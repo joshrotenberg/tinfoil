@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.22](https://github.com/joshrotenberg/tinfoil/compare/v0.2.21...v0.2.22) (2026-07-25)
+
+
+### Bug Fixes
+
+* thread the release tag into tinfoil.build ([#117](https://github.com/joshrotenberg/tinfoil/issues/117)) ([492308f](https://github.com/joshrotenberg/tinfoil/commit/492308f995f56fa8e5b086e1e175b8ec5c1840bf))
+
 ## [0.2.21](https://github.com/joshrotenberg/tinfoil/compare/v0.2.20...v0.2.21) (2026-07-24)
 
 
